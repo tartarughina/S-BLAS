@@ -111,15 +111,16 @@ void sblas_spmv_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
     size_t bufferSize = 0;
     CHECK_CUSPARSE(cusparseSpMV_bufferSize(
         handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &dummy_alpha, matA, vecB,
-        &dummy_beta, vecC, valueType, CUSPARSE_MV_ALG_DEFAULT, &bufferSize));
+        &dummy_beta, vecC, valueType, CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize));
 
     void *externalBuffer = nullptr;
     CUDA_SAFE_CALL(cudaMalloc(&externalBuffer, bufferSize));
 
     // Perform SpMV operation
-    CHECK_CUSPARSE(cusparseSpMV(
-        handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &dummy_alpha, matA, vecB,
-        &dummy_beta, vecC, valueType, CUSPARSE_MV_ALG_DEFAULT, externalBuffer));
+    CHECK_CUSPARSE(cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                &dummy_alpha, matA, vecB, &dummy_beta, vecC,
+                                valueType, CUSPARSE_SPMV_ALG_DEFAULT,
+                                externalBuffer));
 
 #pragma omp barrier
 
