@@ -14,7 +14,8 @@
 # environment parameters
 CUDA_INSTALL_PATH ?= ${NVIDIA_PATH}/cuda
 CUDA_SAMPLES_PATH ?= /usr/local/cuda/samples
-CUDA_MATH_LIBS ?= ${NVIDIA_PATH}/math_libs
+CUDA_MATH_PATH ?= ${NVIDIA_PATH}/math_libs
+CUDA_COMM_PATH ?= ${NVIDIA_PATH}/comm_libs/nccl
 #compiler
 NVCC = $(CUDA_INSTALL_PATH)/bin/nvcc
 CC = g++
@@ -25,8 +26,8 @@ NVCC_FLAGS = -O3 -w -m64 -gencode=arch=compute_80,code=compute_80
 #debugging
 #NVCC_FLAGS = -O0 -g -G -m64 -gencode=arch=compute_70,code=compute_70
 
-CUDA_INCLUDES = -I$(CUDA_INSTALL_PATH)/include -I$(CUDA_SAMPLES_PATH)/common/inc -I$(CUDA_MATH_LIBS)/include
-CUDA_LIBS = -L$(CUDA_INSTALL_PATH)/lib64 -lcudart -lcusparse -Xcompiler -fopenmp -lnccl
+CUDA_INCLUDES = -I$(CUDA_INSTALL_PATH)/include -I$(CUDA_SAMPLES_PATH)/common/inc -I$(CUDA_MATH_PATH)/include -I$(CUDA_COMM_PATH)/include
+CUDA_LIBS = -L$(CUDA_INSTALL_PATH)/lib64 -L$(CUDA_MATH_PATH)/lib64 -L$(CUDA_COMM_PATH)/lib -lcudart -lcusparse -Xcompiler -fopenmp -lnccl
 
 all: unit_test spmm_test
 
