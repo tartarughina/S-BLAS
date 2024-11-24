@@ -18,6 +18,7 @@
 #include "matrix.h"
 #include "utility.h"
 #include <assert.h>
+#include <cuda_runtime.h>
 #include <cusparse.h>
 #include <iostream>
 #include <nccl.h>
@@ -174,7 +175,6 @@ void sblas_spmm_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
     CHECK_CUSPARSE(cusparseDestroyDnMat(matC));
     CHECK_CUSPARSE(cusparseDestroy(handle));
   } // end of omp
-}
 }
 
 template <typename IdxType, typename DataType>
