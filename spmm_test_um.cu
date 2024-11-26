@@ -20,7 +20,7 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
                  unsigned n_gpu) {
   cpu_timer load_timer, run_timer, run_cpu_timer;
   load_timer.start_timer();
-  CsrSparseMatrix<int, double> A(A_path);
+  CsrSparseMatrix<int, double> A(A_path, n_gpu);
   cout << "CSR matrix A created" << endl;
   DenseMatrix<int, double> B(A.width, b_width, col_major);
   cout << "Dense matrix B created" << endl;
