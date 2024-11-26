@@ -337,9 +337,9 @@ public:
     this->width = (IdxType)n;
     this->nnz = (IdxType)nnzA;
 
-    cooRowIdx_gpu = new IdxType *[n_gpu];
-    cooColIdx_gpu = new IdxType *[n_gpu];
-    cooVal_gpu = new DataType *[n_gpu];
+    csrRowPtr_gpu = new IdxType *[n_gpu];
+    csrColIdx_gpu = new IdxType *[n_gpu];
+    csrVal_gpu = new DataType *[n_gpu];
 
     SAFE_ALOC_MANAGED(this->csrRowPtr, get_row_ptr_size());
     SAFE_ALOC_MANAGED(this->csrColIdx_gpu[0], get_col_idx_size());
