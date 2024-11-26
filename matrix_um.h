@@ -337,9 +337,9 @@ public:
     this->width = (IdxType)n;
     this->nnz = (IdxType)nnzA;
 
-    SAFE_ALOC_HOST(csrRowPtr_gpu, n_gpu * sizeof(IdxType *));
-    SAFE_ALOC_HOST(csrColIdx_gpu, n_gpu * sizeof(IdxType *));
-    SAFE_ALOC_HOST(csrVal_gpu, n_gpu * sizeof(DataType *));
+    cooRowIdx_gpu = new IdxType *[n_gpu];
+    cooColIdx_gpu = new IdxType *[n_gpu];
+    cooVal_gpu = new DataType *[n_gpu];
 
     SAFE_ALOC_MANAGED(this->csrRowPtr, get_row_ptr_size());
     SAFE_ALOC_MANAGED(this->csrColIdx_gpu[0], get_col_idx_size());
@@ -439,11 +439,10 @@ public:
           if (i == 0)
             continue;
           // GPU0 already has the data needed
-          else {
-            // Segments the data to the other GPUs
-            csrColIdx_gpu[i] = &csrColIdx_gpu[0][i * avg_nnz];
-            csrVal_gpu[i] = &csrVal_gpu[0][i * avg_nnz];
-          }
+
+          // Segments the data to the other GPUs
+          csrColIdx_gpu[i] = &csrColIdx_gpu[0][i * avg_nnz];
+          csrVal_gpu[i] = &csrVal_gpu[0][i * avg_nnz];
 
           printf("gpu-%d,start-row:%d,stop-row:%d,num-rows:%ld,num-nnz:%d\n", i,
                  starting_row_gpu[i], stoping_row_gpu[i],
