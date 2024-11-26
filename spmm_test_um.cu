@@ -21,25 +21,34 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
   cpu_timer load_timer, run_timer, run_cpu_timer;
   load_timer.start_timer();
   CsrSparseMatrix<int, double> A(A_path);
+  cout << "CSR matrix A created" << endl;
   DenseMatrix<int, double> B(A.width, b_width, col_major);
+  cout << "Dense matrix B created" << endl;
   DenseMatrix<int, double> C(A.height, b_width, 1, col_major);
+  cout << "Dense matrix C created" << endl;
   DenseMatrix<int, double> C_cpu(A.height, b_width, 1, col_major);
+  cout << "Dense matrix C_cpu created" << endl;
   // Partition and Distribute
   A.sync2gpu(n_gpu, replicate);
+  cout << "A synced to GPU" << endl;
   B.sync2gpu(n_gpu, segment);
+  cout << "B synced to GPU" << endl;
   C.sync2gpu(n_gpu, segment);
+  cout << "C synced to GPU" << endl;
 
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   load_timer.stop_timer();
 
   run_timer.start_timer();
   sblas_spmm_csr_v1<int, double>(&A, &B, &C, alpha, beta, n_gpu);
+  cout << "sblas_spmm_csr_v1 completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_timer.stop_timer();
 
   run_cpu_timer.start_timer();
   sblas_spmm_csr_cpu<int, double>(&A, &B, &C_cpu, alpha, beta);
+  cout << "sblas_spmm_csr_cpu completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_cpu_timer.stop_timer();
@@ -61,22 +70,33 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   load_timer.start_timer();
   // CsrSparseMatrix<int, double> A("./ash85.mtx");
   CsrSparseMatrix<int, double> A(A_path);
+  cout << "CSR matrix A created" << endl;
   DenseMatrix<int, double> B(A.width, b_width, col_major);
+  cout << "Dense matrix B created" << endl;
   DenseMatrix<int, double> C(A.height, b_width, 1, col_major);
+  cout << "Dense matrix C created" << endl;
   DenseMatrix<int, double> C_cpu(A.height, b_width, 1, col_major);
+  cout << "Dense matrix C_cpu created" << endl;
+
   // Partition and Distribute
   A.sync2gpu(n_gpu, segment);
+  cout << "A synced to GPU" << endl;
   B.sync2gpu(n_gpu, replicate);
+  cout << "B synced to GPU" << endl;
   C.sync2gpu(n_gpu, replicate);
+  cout << "C synced to GPU" << endl;
+
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   load_timer.stop_timer();
   run_timer.start_timer();
   sblas_spmm_csr_v2<int, double>(&A, &B, &C, alpha, beta, n_gpu);
+  cout << "sblas_spmm_csr_v2 completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_timer.stop_timer();
   run_cpu_timer.start_timer();
   sblas_spmm_csr_cpu<int, double>(&A, &B, &C_cpu, alpha, beta);
+  cout << "sblas_spmm_csr_cpu completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_cpu_timer.stop_timer();
