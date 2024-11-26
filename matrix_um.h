@@ -570,9 +570,6 @@ public:
 
   DenseMatrix(IdxType _height, IdxType _width, enum MajorOrder _order)
       : height(_height), width(_width), order(_order), n_gpu(0) {
-    val_gpu = new DataType *[n_gpu];
-    SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
-
     SAFE_ALOC_MANAGED(val, get_mtx_size());
     srand(RAND_INIT_SEED);
 
@@ -584,8 +581,6 @@ public:
   DenseMatrix(IdxType _height, IdxType _width, DataType _val,
               enum MajorOrder _order)
       : height(_height), width(_width), order(_order), n_gpu(0) {
-    val_gpu = new DataType *[n_gpu];
-    SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
     SAFE_ALOC_MANAGED(val, get_mtx_size());
 
     srand(RAND_INIT_SEED);
@@ -601,12 +596,16 @@ public:
     this->policy = _policy;
     assert(this->n_gpu != 0);
     assert(this->policy != none);
+
+    val_gpu = new DataType *[n_gpu];
+
     if (policy == replicate) {
       for (unsigned i = 0; i < n_gpu; i++) {
         SAFE_ALOC_MANAGED(val_gpu[i], get_mtx_size());
         std::memcpy(val_gpu[i], val, get_mtx_size());
       }
     } else if (policy == segment) {
+      SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
       cout << "Segmenting the matrix" << endl;
       IdxType first_order = (order == row_major) ? height : width;
       IdxType second_order = (order == row_major) ? width : height;
