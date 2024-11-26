@@ -607,14 +607,18 @@ public:
         std::memcpy(val_gpu[i], val, get_mtx_size());
       }
     } else if (policy == segment) {
+      cout << "Segmenting the matrix" << endl;
       IdxType first_order = (order == row_major) ? height : width;
       IdxType second_order = (order == row_major) ? width : height;
 
       IdxType avg_val = ceil((double)first_order / n_gpu);
       for (unsigned i = 0; i < n_gpu; i++) {
+        cout << "Segmenting GPU " << i << endl;
         dim_gpu[i] = min((i + 1) * avg_val, first_order) - i * avg_val;
+        cout << "Defined GPU dimension as " << dim_gpu[i] << endl;
         // SAFE_ALOC_MANAGED(val_gpu[i], second_order * get_dim_gpu_size(i));
         val_gpu[i] = &val[(i * avg_val) * second_order];
+        cout << "Assigned offset to GPU" << endl
 
         // std::memcpy(val_gpu[i], &val[(i * avg_val) * second_order],
         //             second_order * get_dim_gpu_size(i));
