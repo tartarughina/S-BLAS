@@ -37,5 +37,8 @@ unit_test: unit_test.cu matrix.h spmv.h spmm.h mmio_highlevel.h kernel.h utility
 spmm_test: spmm_test.cu matrix.h spmv.h spmm.h mmio_highlevel.h kernel.h utility.h
 	$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmm_test.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
 
+spmm_test_um: spmm_test_um.cu matrix_um.h spmv.h spmm_um.h mmio_highlevel.h kernel.h utility.h
+	$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmm_test_um.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
+
 clean:
-	rm unit_test spmm_test
+	rm unit_test spmm_test spmm_test_um
