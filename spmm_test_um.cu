@@ -13,8 +13,8 @@
 // ------------------------------------------------------------------------
 
 #include "matrix_um.h"
-#include "sblas.h"
-#include "spmm.h"
+#include "sblas_um.h"
+#include "spmm_um.h"
 
 bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
                  unsigned n_gpu) {

@@ -13,8 +13,8 @@
 // MIT Lincese.
 // ------------------------------------------------------------------------
 
-#ifndef MATRIX_H
-#define MATRIX_H
+#ifndef MATRIX_UM_H
+#define MATRIX_UM_H
 
 #include "kernel.h"
 #include "mmio.h"
