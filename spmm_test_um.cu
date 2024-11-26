@@ -56,7 +56,7 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
   // print_1d_array(C_cpu.val,C_cpu.get_mtx_num());
   // print_1d_array(C.val,C.get_mtx_num());
 
-  bool correct = check_equal(C_cpu.val, C.val, C.get_mtx_num());
+  bool correct = check_equal(C_cpu.val, C.val_gpu[0], C.get_mtx_num());
   cout << "Validation = " << (correct ? "True" : "False") << endl;
   cout << "Load Time: " << load_timer.measure() << "ms." << endl;
   cout << n_gpu << "-GPUs Run Time: " << run_timer.measure() << " ms." << endl;
@@ -104,7 +104,7 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   C.sync2cpu(0);
   // print_1d_array(C.val,C.get_mtx_num());
   // print_1d_array(C_cpu.val,C_cpu.get_mtx_num());
-  bool correct = check_equal(C_cpu.val, C.val, C.get_mtx_num());
+  bool correct = check_equal(C_cpu.val, C.val_gpu[0], C.get_mtx_num());
   cout << "Validation = " << (correct ? "True" : "False") << endl;
   cout << "Load Time: " << load_timer.measure() << "ms." << endl;
   cout << n_gpu << "-GPUs Run Time: " << run_timer.measure() << " ms." << endl;
