@@ -618,7 +618,7 @@ public:
         cout << "Defined GPU dimension as " << dim_gpu[i] << endl;
         // SAFE_ALOC_MANAGED(val_gpu[i], second_order * get_dim_gpu_size(i));
         val_gpu[i] = &val[(i * avg_val) * second_order];
-        cout << "Assigned offset to GPU" << endl
+        cout << "Assigned offset to GPU" << endl;
 
         // std::memcpy(val_gpu[i], &val[(i * avg_val) * second_order],
         //             second_order * get_dim_gpu_size(i));
