@@ -43,8 +43,8 @@ void sblas_spmm_csr_cpu(CsrSparseMatrix<IdxType, DataType> *pA,
       for (IdxType n = 0; n < pB->width; n++) {
         DataType sum = 0;
         for (IdxType j = pA->csrRowPtr[i]; j < pA->csrRowPtr[i + 1]; j++) {
-          IdxType col_A = pA->csrColIdx[j];
-          DataType val_A = pA->csrVal[j];
+          IdxType col_A = pA->csrRowPtr_gpu[0][j];
+          DataType val_A = pA->csrVal_gpu[0][j];
           DataType val_B = pB->val[n * (pB->height) + col_A];
           sum += val_A * val_B;
         }
@@ -57,8 +57,8 @@ void sblas_spmm_csr_cpu(CsrSparseMatrix<IdxType, DataType> *pA,
       for (IdxType n = 0; n < pB->width; n++) {
         DataType sum = 0;
         for (IdxType j = pA->csrRowPtr[i]; j < pA->csrRowPtr[i + 1]; j++) {
-          IdxType col_A = pA->csrColIdx[j];
-          DataType val_A = pA->csrVal[j];
+          IdxType col_A = pA->csrRowPtr_gpu[0][j];
+          DataType val_A = pA->csrVal_gpu[0][j];
           DataType val_B = pB->val[n * (pB->height) + col_A];
           sum += val_A * val_B;
         }
