@@ -630,7 +630,9 @@ public:
   ~DenseMatrix() {
     SAFE_FREE_GPU(val);
     SAFE_FREE_HOST(dim_gpu);
-    SAFE_FREE_MULTI_GPU(val_gpu, n_gpu);
+
+    if (policy == replicate)
+      SAFE_FREE_MULTI_GPU(val_gpu, n_gpu);
   }
 
   DenseMatrix *transpose() {
