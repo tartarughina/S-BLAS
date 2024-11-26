@@ -570,7 +570,7 @@ public:
 
   DenseMatrix(IdxType _height, IdxType _width, enum MajorOrder _order)
       : height(_height), width(_width), order(_order), n_gpu(0) {
-    SAFE_ALOC_HOST(val_gpu, n_gpu * sizeof(DataType *));
+    val_gpu = new DataType *[n_gpu];
     SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
 
     SAFE_ALOC_MANAGED(val, get_mtx_size());
@@ -584,7 +584,7 @@ public:
   DenseMatrix(IdxType _height, IdxType _width, DataType _val,
               enum MajorOrder _order)
       : height(_height), width(_width), order(_order), n_gpu(0) {
-    SAFE_ALOC_HOST(val_gpu, n_gpu * sizeof(DataType *));
+    val_gpu = new DataType *[n_gpu];
     SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
     SAFE_ALOC_MANAGED(val, get_mtx_size());
 
@@ -733,7 +733,7 @@ public:
     memcpy(val, dv.val, get_vec_size());
 
     if (n_gpu != 0 && policy != none) {
-      SAFE_ALOC_HOST(val_gpu, n_gpu * sizeof(DataType *));
+      val_gpu = new DataType *[n_gpu];
       for (unsigned i = 0; i < n_gpu; i++) {
         // CUDA_SAFE_CALL(cudaSetDevice(i));
         SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
@@ -750,7 +750,7 @@ public:
     assert(this->policy != segment); // assume now vector does not need
                                      // partition
     if (policy == replicate) {
-      SAFE_ALOC_HOST(val_gpu, n_gpu * sizeof(DataType *));
+      val_gpu = new DataType *[n_gpu];
       for (unsigned i = 0; i < n_gpu; i++) {
         // CUDA_SAFE_CALL(cudaSetDevice(i));
         SAFE_ALOC_GPU(val_gpu[i], get_vec_size());
