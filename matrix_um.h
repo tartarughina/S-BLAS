@@ -323,9 +323,17 @@ public:
     SAFE_FREE_GPU(csrRowPtr);
     // SAFE_FREE_HOST(csrColIdx);
     // SAFE_FREE_HOST(csrVal);
-    SAFE_FREE_MULTI_GPU(csrRowPtr_gpu, n_gpu);
-    SAFE_FREE_MULTI_GPU(csrColIdx_gpu, n_gpu);
-    SAFE_FREE_MULTI_GPU(csrVal_gpu, n_gpu);
+
+    SAFE_FREE_MULTI_MANAGED(csrRowPtr_gpu, n_gpu);
+
+    if (policy == replicate) {
+      SAFE_FREE_MULTI_MANAGED(csrColIdx_gpu, n_gpu);
+      SAFE_FREE_MULTI_MANAGED(csrVal_gpu, n_gpu);
+    } else {
+      SAFE_FREE_MULTI_MANAGED(csrColIdx_gpu, 1);
+      SAFE_FREE_MULTI_MANAGED(csrVal_gpu, 1);
+    }
+
     SAFE_FREE_HOST(nnz_gpu);
     SAFE_FREE_HOST(starting_row_gpu);
     SAFE_FREE_HOST(stoping_row_gpu);
