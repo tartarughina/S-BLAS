@@ -109,6 +109,16 @@ inline void __cusparseSafeCall(cusparseStatus_t err, const char *file,
     CUDA_SAFE_CALL(cudaSetDevice(current_dev));                                \
   }
 
+#define SAFE_FREE_MULTI_MANAGED(X, Y)                                          \
+  if ((X) != NULL) {                                                           \
+    for (unsigned i = 0; i < (Y); i++)                                         \
+      if (((X)[i]) != NULL) {                                                  \
+        SAFE_FREE_GPU((X)[i]);                                                 \
+      }                                                                        \
+    std::free(X);                                                              \
+    (X) = NULL;                                                                \
+  }
+
 #define SAFE_ALOC_HOST(X, Y) CUDA_SAFE_CALL(cudaMallocHost((void **)&(X), (Y)));
 
 #define SAFE_ALOC_GPU(X, Y) CUDA_SAFE_CALL(cudaMalloc((void **)&(X), (Y)));
