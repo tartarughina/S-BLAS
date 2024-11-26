@@ -96,7 +96,7 @@ void sblas_spmm_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
     std::cerr << "SBLAS_SPMM_CSR_V1: C should be in column major!" << std::endl;
     exit(-1);
   }
-
+  cout << "sblas_spmm_csr_v1 ready to start" << endl;
   // Start OpenMP
 #pragma omp parallel num_threads(n_gpu)
   {
@@ -148,6 +148,7 @@ void sblas_spmm_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
                             static_cast<int64_t>(pA->height),
                             pC->val_gpu[i_gpu], valueType, CUSPARSE_ORDER_COL));
 
+    cout << "Matrices description completed" << endl;
     size_t bufferSize = 0;
     CHECK_CUSPARSE(cusparseSpMM_bufferSize(
         handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
