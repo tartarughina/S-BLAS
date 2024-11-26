@@ -570,6 +570,9 @@ public:
 
   DenseMatrix(IdxType _height, IdxType _width, enum MajorOrder _order)
       : height(_height), width(_width), order(_order), n_gpu(0) {
+
+    val_gpu = NULL;
+    dim_gpu = NULL;
     SAFE_ALOC_MANAGED(val, get_mtx_size());
     srand(RAND_INIT_SEED);
 
@@ -581,6 +584,9 @@ public:
   DenseMatrix(IdxType _height, IdxType _width, DataType _val,
               enum MajorOrder _order)
       : height(_height), width(_width), order(_order), n_gpu(0) {
+
+    val_gpu = NULL;
+    dim_gpu = NULL;
     SAFE_ALOC_MANAGED(val, get_mtx_size());
 
     srand(RAND_INIT_SEED);
@@ -752,7 +758,7 @@ public:
       val_gpu = new DataType *[n_gpu];
       for (unsigned i = 0; i < n_gpu; i++) {
         // CUDA_SAFE_CALL(cudaSetDevice(i));
-        SAFE_ALOC_GPU(val_gpu[i], get_vec_size());
+        SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
         std::memcpy(val_gpu[i], val, get_vec_size());
         // CUDA_SAFE_CALL(cudaMemcpy(val_gpu[i], val, get_vec_size(),
         //                           cudaMemcpyHostToDevice));
@@ -784,7 +790,7 @@ public:
     }
   }
   ~DenseVector() {
-    SAFE_FREE_HOST(this->val);
+    SAFE_FREE_GPU(this->val);
     SAFE_FREE_MULTI_GPU(val_gpu, n_gpu);
   }
   size_t get_vec_size() { return (size_t)length * sizeof(DataType); }
