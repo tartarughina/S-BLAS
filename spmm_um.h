@@ -12,8 +12,8 @@
 // MIT Lincese.
 // ------------------------------------------------------------------------
 
-#ifndef SPMM_H
-#define SPMM_H
+#ifndef SPMM_UM_H
+#define SPMM_UM_H
 
 #include "matrix_um.h"
 #include "utility.h"
