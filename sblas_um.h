@@ -16,6 +16,6 @@
 #define SBLAS_UM_H
 
 #include "spmm_um.h"
-#include "spmv.h"
+#include "spmv_um.h"
 
 #endif
