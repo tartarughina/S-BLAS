@@ -655,7 +655,7 @@ public:
       IdxType first_order = (order == row_major) ? height : width;
       IdxType second_order = (order == row_major) ? width : height;
       IdxType avg_val = ceil((double)first_order / n_gpu);
-      // Prefetch towards the host all the scattered pieces
+      // Prefetch towards the host the scattered piece requested
       // CUDA_SAFE_CALL(cudaMemcpy(
       //     &val[i_gpu * avg_val * second_order], val_gpu[i_gpu],
       //     second_order * get_dim_gpu_size(i_gpu), cudaMemcpyDeviceToHost));
