@@ -15,7 +15,7 @@
 #ifndef SPMM_H
 #define SPMM_H
 
-#include "matrix.h"
+#include "matrix_um.h"
 #include "utility.h"
 #include <assert.h>
 #include <cuda_runtime.h>
