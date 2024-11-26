@@ -330,7 +330,8 @@ public:
     SAFE_FREE_HOST(starting_row_gpu);
     SAFE_FREE_HOST(stoping_row_gpu);
   }
-  CsrSparseMatrix(const char *filename) : policy(none), n_gpu(0) {
+  CsrSparseMatrix(const char *filename, int _n_gpu)
+      : policy(none), n_gpu(_n_gpu) {
     int m = 0, n = 0, nnzA = 0, isSymmetricA;
     mmio_info(&m, &n, &nnzA, &isSymmetricA, filename);
     this->height = (IdxType)m;
@@ -358,6 +359,7 @@ public:
       this->csrColIdx_gpu[0][i] = (IdxType)csrColIdxA[i];
       this->csrVal_gpu[0][i] = (DataType)csrValA[i];
     }
+
     free(csrRowPtrA);
     free(csrColIdxA);
     free(csrValA);
