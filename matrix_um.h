@@ -313,16 +313,18 @@ public:
     this->stoping_row_gpu = NULL;
   }
   ~CsrSparseMatrix() {
-    SAFE_FREE_GPU(csrRowPtr);
-    SAFE_FREE_MULTI_MANAGED(csrRowPtr_gpu, n_gpu);
 
     if (policy == replicate) {
+      SAFE_FREE_GPU(csrRowPtr);
+      SAFE_FREE_MULTI_MANAGED(csrRowPtr_gpu, n_gpu);
       SAFE_FREE_MULTI_MANAGED(csrColIdx_gpu, n_gpu);
       SAFE_FREE_MULTI_MANAGED(csrVal_gpu, n_gpu);
     } else if (policy == segment) {
+      SAFE_FREE_MULTI_MANAGED(csrRowPtr_gpu, n_gpu);
       SAFE_FREE_MULTI_MANAGED(csrColIdx_gpu, 1);
       SAFE_FREE_MULTI_MANAGED(csrVal_gpu, 1);
     } else {
+      SAFE_FREE_GPU(csrRowPtr);
       SAFE_FREE_GPU(csrColIdx);
       SAFE_FREE_GPU(csrVal);
     }
@@ -590,7 +592,6 @@ public:
     assert(this->policy != none);
 
     val_gpu = new DataType *[n_gpu];
-    cout << "Allocated GPUs pointers" << endl;
 
     if (policy == replicate) {
       for (unsigned i = 0; i < n_gpu; i++) {
@@ -626,7 +627,9 @@ public:
     SAFE_FREE_HOST(dim_gpu);
 
     if (policy == replicate) {
-      SAFE_FREE_MULTI_GPU(val_gpu, n_gpu);
+      SAFE_FREE_MULTI_MANAGED(val_gpu, n_gpu);
+    } else if (policy == segment) {
+      SAFE_FREE_MULTI_MANAGED(val_gpu, 1);
     } else {
       SAFE_FREE_GPU(val);
     }
