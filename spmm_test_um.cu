@@ -87,10 +87,10 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   // get data back to CPU
   C.sync2cpu(0);
 
-  cout << "GPU result" << endl;
-  print_1d_array(C.val, C.get_mtx_num());
-  cout << "CPU result" << endl;
-  print_1d_array(C_cpu.val, C_cpu.get_mtx_num());
+  // cout << "GPU result" << endl;
+  // print_1d_array(C.val, C.get_mtx_num());
+  // cout << "CPU result" << endl;
+  // print_1d_array(C_cpu.val, C_cpu.get_mtx_num());
 
   bool correct = check_equal(C_cpu.val, C.val, C.get_mtx_num());
   cout << "Validation = " << (correct ? "True" : "False") << endl;
