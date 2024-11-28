@@ -293,8 +293,12 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 #pragma omp barrier
     nccl_timer.stop_timer();
-    std::cout << "GPU-" << i_gpu << " NCCL Time: " << nccl_timer.measure()
-              << "ms." << std::endl;
+
+#pragma omp critical
+    {
+      std::cout << "GPU-" << i_gpu << " NCCL Time: " << nccl_timer.measure()
+                << " ms." << std::endl;
+    }
 
     // Clean up
     cudaFree(externalBuffer);
@@ -304,6 +308,7 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
     CHECK_CUSPARSE(cusparseDestroy(handle));
     CHECK_NCCL(ncclCommDestroy(comm[i_gpu]));
   }
+
   CUDA_CHECK_ERROR();
   pC->plusDenseMatrixGPU(C_copy, alpha, beta);
 }
