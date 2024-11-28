@@ -96,7 +96,7 @@ void sblas_spmm_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
     std::cerr << "SBLAS_SPMM_CSR_V1: C should be in column major!" << std::endl;
     exit(-1);
   }
-
+  cout << "sblas_spmm_csr_v1 ready to start" << endl;
   // Start OpenMP
 #pragma omp parallel num_threads(n_gpu)
   {
@@ -106,25 +106,8 @@ void sblas_spmm_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
     CHECK_CUSPARSE(cusparseCreate(&handle));
 
     // Determine data types
-    cudaDataType valueType;
-    if (std::is_same<DataType, double>::value)
-      valueType = CUDA_R_64F;
-    else if (std::is_same<DataType, float>::value)
-      valueType = CUDA_R_32F;
-    else {
-      std::cerr << "Unsupported DataType!" << std::endl;
-      exit(-1);
-    }
-
-    cusparseIndexType_t indexType;
-    if (std::is_same<IdxType, int32_t>::value)
-      indexType = CUSPARSE_INDEX_32I;
-    else if (std::is_same<IdxType, int64_t>::value)
-      indexType = CUSPARSE_INDEX_64I;
-    else {
-      std::cerr << "Unsupported IdxType!" << std::endl;
-      exit(-1);
-    }
+    cudaDataType valueType = getCudaDataType<DataType>();
+    cusparseIndexType_t indexType = getCusparseIndexType<IdxType>();
 
     cusparseSpMatDescr_t matA;
     CHECK_CUSPARSE(cusparseCreateCsr(
@@ -186,112 +169,98 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
   assert((pA->height) == (pC->height));
   assert((pB->width) == (pC->width));
   if (pB->order == row_major) {
-    std::cerr << "SBLAS_SPMM_CSR_V2: B should be in column major!" << std::endl;
+    cerr << "SBLAS_SPMM_CSR_V2: B should be in column major!" << endl;
     exit(-1);
   }
   if (pC->order == row_major) {
-    std::cerr << "SBLAS_SPMM_CSR_V2: C should be in col major!" << std::endl;
+    cerr << "SBLAS_SPMM_CSR_V2: C should be in col major!" << endl;
     exit(-1);
   }
-
   ncclUniqueId id;
   ncclGetUniqueId(&id);
   ncclComm_t comm[n_gpu];
-
-  // Create a copy of C in row-major order
   DenseMatrix<IdxType, DataType> C_copy(pC->height, pC->width, 0., row_major);
   C_copy.sync2gpu(n_gpu, replicate);
-
-  // Start OpenMP
+// Start OpenMP
 #pragma omp parallel num_threads(n_gpu) shared(comm, id)
   {
     int i_gpu = omp_get_thread_num();
     CUDA_SAFE_CALL(cudaSetDevice(i_gpu));
     CHECK_NCCL(ncclCommInitRank(&comm[i_gpu], n_gpu, id, i_gpu));
 
+    // Create cuSPARSE handle
     cusparseHandle_t handle;
     CHECK_CUSPARSE(cusparseCreate(&handle));
 
-    // Determine data types
-    cudaDataType valueType;
-    if (std::is_same<DataType, double>::value)
-      valueType = CUDA_R_64F;
-    else if (std::is_same<DataType, float>::value)
-      valueType = CUDA_R_32F;
-    else {
-      std::cerr << "Unsupported DataType!" << std::endl;
-      exit(-1);
-    }
+    // Determine the data types
+    cudaDataType valueType = getCudaDataType<DataType>();
+    cusparseIndexType_t indexType = getCusparseIndexType<IdxType>();
 
-    cusparseIndexType_t indexType;
-    if (std::is_same<IdxType, int32_t>::value)
-      indexType = CUSPARSE_INDEX_32I;
-    else if (std::is_same<IdxType, int64_t>::value)
-      indexType = CUSPARSE_INDEX_64I;
-    else {
-      std::cerr << "Unsupported IdxType!" << std::endl;
-      exit(-1);
-    }
-
-    // Create sparse matrix descriptor for A
+    // Create matrix descriptors
     cusparseSpMatDescr_t matA;
-    CHECK_CUSPARSE(cusparseCreateCsr(
-        &matA, static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) - 1),
-        static_cast<int64_t>(pA->width),
-        static_cast<int64_t>(pA->nnz_gpu[i_gpu]), pA->csrRowPtr_gpu[i_gpu],
-        pA->csrColIdx_gpu[i_gpu], pA->csrVal_gpu[i_gpu], indexType, indexType,
-        CUSPARSE_INDEX_BASE_ZERO, valueType));
+    cusparseDnMatDescr_t matB, matC;
 
-    // Create dense matrix descriptor for B
-    cusparseDnMatDescr_t matB;
-    CHECK_CUSPARSE(cusparseCreateDnMat(
-        &matB, static_cast<int64_t>(pB->height),
-        static_cast<int64_t>(pB->width), static_cast<int64_t>(pB->height),
-        pB->val_gpu[i_gpu], valueType, CUSPARSE_ORDER_COL));
+    int64_t rowsA = pA->get_gpu_row_ptr_num(i_gpu) - 1; // m
+    int64_t colsA = pA->width;                          // k
+    int64_t nnzA = pA->nnz_gpu[i_gpu];
 
-    // Create dense matrix descriptor for C_copy
-    cusparseDnMatDescr_t matC;
-    CHECK_CUSPARSE(cusparseCreateDnMat(
-        &matC,
-        static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) -
-                             1),         // Number of rows
-        static_cast<int64_t>(pB->width), // Number of columns
-        static_cast<int64_t>(pB->width), // Leading dimension (ldc)
-        &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu]], // Data pointer
-        valueType, CUSPARSE_ORDER_ROW));
+    void *csrRowOffsets = pA->csrRowPtr_gpu[i_gpu];
+    void *csrColInd = pA->csrColIdx_gpu[i_gpu];
+    void *csrValues = pA->csrVal_gpu[i_gpu];
 
-    // Set alpha and beta
-    DataType dummy_alpha = static_cast<DataType>(1.0);
-    DataType dummy_beta = static_cast<DataType>(1.0);
+    CHECK_CUSPARSE(cusparseCreateCsr(&matA, rowsA, colsA, nnzA, csrRowOffsets,
+                                     csrColInd, csrValues, indexType, indexType,
+                                     CUSPARSE_INDEX_BASE_ZERO, valueType));
 
-    // Compute buffer size and allocate buffer
+    int64_t rowsB = pB->height; // k
+    int64_t colsB = pB->width;  // n
+    int64_t ldb = pB->height;   // leading dimension
+    void *valuesB = pB->val_gpu[i_gpu];
+    cusparseOrder_t orderB = CUSPARSE_ORDER_COL;
+
+    CHECK_CUSPARSE(cusparseCreateDnMat(&matB, rowsB, colsB, ldb, valuesB,
+                                       valueType, orderB));
+
+    int64_t rowsC = rowsA;    // m
+    int64_t colsC = colsB;    // n
+    int64_t ldc = pC->height; // leading dimension
+    void *valuesC = &(C_copy.val_gpu[i_gpu])[(pA->starting_row_gpu[i_gpu])];
+    cusparseOrder_t orderC = CUSPARSE_ORDER_COL;
+
+    CHECK_CUSPARSE(cusparseCreateDnMat(&matC, rowsC, colsC, ldc, valuesC,
+                                       valueType, orderC));
+
+    DataType dummy_alpha = 1.0;
+    DataType dummy_beta = 1.0;
+
+    // Allocate buffer
     size_t bufferSize = 0;
+    void *dBuffer = NULL;
+
     CHECK_CUSPARSE(cusparseSpMM_bufferSize(
         handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
         CUSPARSE_OPERATION_NON_TRANSPOSE, &dummy_alpha, matA, matB, &dummy_beta,
         matC, valueType, CUSPARSE_SPMM_ALG_DEFAULT, &bufferSize));
 
-    void *externalBuffer = nullptr;
-    CUDA_SAFE_CALL(cudaMalloc(&externalBuffer, bufferSize));
+    CUDA_SAFE_CALL(cudaMalloc(&dBuffer, bufferSize));
 
     // Perform SpMM
     CHECK_CUSPARSE(cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                 CUSPARSE_OPERATION_NON_TRANSPOSE, &dummy_alpha,
                                 matA, matB, &dummy_beta, matC, valueType,
-                                CUSPARSE_SPMM_ALG_DEFAULT, externalBuffer));
+                                CUSPARSE_SPMM_ALG_DEFAULT, dBuffer));
 
 #pragma omp barrier
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+    CUDA_SAFE_CALL(cudaThreadSynchronize());
 #pragma omp barrier
 
     // NCCL AllReduce to sum partial results
     gpu_timer nccl_timer;
     nccl_timer.start_timer();
     CHECK_NCCL(ncclAllReduce(C_copy.val_gpu[i_gpu], C_copy.val_gpu[i_gpu],
-                             C_copy.get_mtx_num(),
-                             (valueType == CUDA_R_64F) ? ncclDouble : ncclFloat,
-                             ncclSum, comm[i_gpu], 0));
-    CUDA_SAFE_CALL(cudaDeviceSynchronize());
+                             C_copy.get_mtx_num(), ncclDouble, ncclSum,
+                             comm[i_gpu], 0));
+    CUDA_SAFE_CALL(cudaThreadSynchronize());
 #pragma omp barrier
     nccl_timer.stop_timer();
 
@@ -302,7 +271,7 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
     }
 
     // Clean up
-    cudaFree(externalBuffer);
+    cudaFree(dBuffer);
     CHECK_CUSPARSE(cusparseDestroySpMat(matA));
     CHECK_CUSPARSE(cusparseDestroyDnMat(matB));
     CHECK_CUSPARSE(cusparseDestroyDnMat(matC));
