@@ -61,25 +61,9 @@ void sblas_spmv_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
     CHECK_CUSPARSE(cusparseCreate(&handle));
 
     // Determine data types
-    cudaDataType valueType;
-    if (std::is_same<DataType, double>::value)
-      valueType = CUDA_R_64F;
-    else if (std::is_same<DataType, float>::value)
-      valueType = CUDA_R_32F;
-    else {
-      std::cerr << "Unsupported DataType!" << std::endl;
-      exit(-1);
-    }
+    cudaDataType valueType = getCudaDataType<DataType>();
 
-    cusparseIndexType_t indexType;
-    if (std::is_same<IdxType, int32_t>::value)
-      indexType = CUSPARSE_INDEX_32I;
-    else if (std::is_same<IdxType, int64_t>::value)
-      indexType = CUSPARSE_INDEX_64I;
-    else {
-      std::cerr << "Unsupported IdxType!" << std::endl;
-      exit(-1);
-    }
+    cusparseIndexType_t indexType = getCusparseIndexType<IdxType>();
 
     // Create sparse matrix descriptor for A
     cusparseSpMatDescr_t matA;
@@ -104,8 +88,8 @@ void sblas_spmv_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
         &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu]], valueType));
 
     // Set alpha and beta
-    DataType dummy_alpha = static_cast<DataType>(1.0);
-    DataType dummy_beta = static_cast<DataType>(1.0);
+    DataType dummy_alpha = 1.0;
+    DataType dummy_beta = 1.0;
 
     // Compute buffer size and allocate buffer
     size_t bufferSize = 0;
@@ -113,38 +97,44 @@ void sblas_spmv_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
         handle, CUSPARSE_OPERATION_NON_TRANSPOSE, &dummy_alpha, matA, vecB,
         &dummy_beta, vecC, valueType, CUSPARSE_SPMV_ALG_DEFAULT, &bufferSize));
 
-    void *externalBuffer = nullptr;
-    CUDA_SAFE_CALL(cudaMalloc(&externalBuffer, bufferSize));
+    void *dBuffer = nullptr;
+    CUDA_SAFE_CALL(cudaMalloc(&dBuffer, bufferSize));
 
     // Perform SpMV operation
     CHECK_CUSPARSE(cusparseSpMV(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                                 &dummy_alpha, matA, vecB, &dummy_beta, vecC,
-                                valueType, CUSPARSE_SPMV_ALG_DEFAULT,
-                                externalBuffer));
+                                valueType, CUSPARSE_SPMV_ALG_DEFAULT, dBuffer));
 
 #pragma omp barrier
+    CUDA_SAFE_CALL(cudaThreadSynchronize());
+#pragma omp barrier
 
-    // Destroy cuSPARSE descriptors
-    CHECK_CUSPARSE(cusparseDestroySpMat(matA));
-    CHECK_CUSPARSE(cusparseDestroyDnVec(vecB));
-    CHECK_CUSPARSE(cusparseDestroyDnVec(vecC));
-    CHECK_CUSPARSE(cusparseDestroy(handle));
-
+    gpu_timer nccl_timer;
+    nccl_timer.start_timer();
     // Perform NCCL AllReduce to sum results across GPUs
     CHECK_NCCL(ncclAllReduce(C_copy.val_gpu[i_gpu], C_copy.val_gpu[i_gpu],
                              C_copy.get_vec_length(),
                              (valueType == CUDA_R_64F) ? ncclDouble : ncclFloat,
                              ncclSum, comm[i_gpu], 0));
+    CUDA_SAFE_CALL(cudaThreadSynchronize());
+#pragma omp barrier
+    nccl_timer.stop_timer();
 
+#pragma omp critical
+    {
+      cout << "GPU-" << i_gpu << " NCCL Time: " << nccl_timer.measure()
+           << " ms." << std::endl;
+    }
+
+    cudaFree(dBuffer);
+    CHECK_CUSPARSE(cusparseDestroySpMat(matA));
+    CHECK_CUSPARSE(cusparseDestroyDnVec(vecB));
+    CHECK_CUSPARSE(cusparseDestroyDnVec(vecC));
+    CHECK_CUSPARSE(cusparseDestroy(handle));
     CHECK_NCCL(ncclCommDestroy(comm[i_gpu]));
-
-    // Free external buffer
-    cudaFree(externalBuffer);
   }
 
   CUDA_CHECK_ERROR();
-
-  // Update pC with the results from C_copy
   pC->plusDenseVectorGPU(C_copy, alpha, beta);
 }
 
