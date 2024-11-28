@@ -252,11 +252,13 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
     // Create dense matrix descriptor for C_copy
     cusparseDnMatDescr_t matC;
     CHECK_CUSPARSE(cusparseCreateDnMat(
-        &matC, static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) - 1),
-        static_cast<int64_t>(pB->width),
-        static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) - 1),
-        &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu]], valueType,
-        CUSPARSE_ORDER_COL));
+        &matC,
+        static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) -
+                             1),         // Number of rows
+        static_cast<int64_t>(pB->width), // Number of columns
+        static_cast<int64_t>(pB->width), // Leading dimension (ldc)
+        &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu]], // Data pointer
+        valueType, CUSPARSE_ORDER_ROW));
 
     // Set alpha and beta
     DataType dummy_alpha = static_cast<DataType>(1.0);
