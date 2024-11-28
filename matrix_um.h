@@ -120,23 +120,34 @@ int cmp_func(const void *aa, const void *bb) {
 template <typename IdxType, typename DataType> class CooSparseMatrix {
 public:
   CooSparseMatrix() : nnz(0), height(0), width(0), n_gpu(0), policy(none) {
-    // this->cooRowIdx = NULL;
-    // this->cooColIdx = NULL;
-    // this->cooVal = NULL;
+    this->cooRowIdx = NULL;
+    this->cooColIdx = NULL;
+    this->cooVal = NULL;
     this->cooRowIdx_gpu = NULL;
     this->cooColIdx_gpu = NULL;
     this->cooVal_gpu = NULL;
     this->nnz_gpu = NULL;
   }
   ~CooSparseMatrix() {
-    // SAFE_FREE_HOST(this->cooRowIdx);
-    // SAFE_FREE_HOST(this->cooColIdx);
-    // SAFE_FREE_HOST(this->cooVal);
+    // GPU[0] points to the same cooRowIdx as CPU, for this reason the free when
+    // gpu is used is not done on those pointers
+
     if (n_gpu != 0 and policy != none) {
-      SAFE_FREE_MULTI_GPU(cooRowIdx_gpu, n_gpu);
-      SAFE_FREE_MULTI_GPU(cooColIdx_gpu, n_gpu);
-      SAFE_FREE_MULTI_GPU(cooVal_gpu, n_gpu);
+      if (policy == replicate) {
+        SAFE_FREE_MULTI_MANAGED(cooRowIdx_gpu, n_gpu);
+        SAFE_FREE_MULTI_MANAGED(cooColIdx_gpu, n_gpu);
+        SAFE_FREE_MULTI_MANAGED(cooVal_gpu, n_gpu);
+      } else {
+        SAFE_FREE_MULTI_MANAGED(cooRowIdx_gpu, 1);
+        SAFE_FREE_MULTI_MANAGED(cooColIdx_gpu, 1);
+        SAFE_FREE_MULTI_MANAGED(cooVal_gpu, 1);
+      }
+
       SAFE_FREE_HOST(nnz_gpu);
+    } else {
+      SAFE_FREE_GPU(this->cooRowIdx);
+      SAFE_FREE_GPU(this->cooColIdx);
+      SAFE_FREE_GPU(this->cooVal);
     }
   }
   CooSparseMatrix(const char *filename, unsigned n_gpu = 0,
@@ -172,83 +183,64 @@ public:
     // For duplication, n_gpu malloc but work with gpu[0] array as if its the
     // CPU one
 
-    SAFE_ALOC_HOST(cooRowIdx_gpu, n_gpu * sizeof(IdxType *));
-    SAFE_ALOC_HOST(cooColIdx_gpu, n_gpu * sizeof(IdxType *));
-    SAFE_ALOC_HOST(cooVal_gpu, n_gpu * sizeof(DataType *));
+    cooRowIdx_gpu = new IdxType *[n_gpu];
+    cooColIdx_gpu = new IdxType *[n_gpu];
+    cooVal_gpu = new DataType *[n_gpu];
 
-    SAFE_ALOC_MANAGED(this->cooRowIdx_gpu[0], get_nnz_idx_size());
-    SAFE_ALOC_MANAGED(this->cooColIdx_gpu[0], get_nnz_idx_size());
-    SAFE_ALOC_MANAGED(this->cooVal_gpu[0], get_nnz_val_size());
+    SAFE_ALOC_MANAGED(this->cooRowIdx, get_nnz_idx_size());
+    SAFE_ALOC_MANAGED(this->cooColIdx, get_nnz_idx_size());
+    SAFE_ALOC_MANAGED(this->cooVal, get_nnz_val_size());
 
     for (unsigned i = 0; i < nnz; i++) {
       int row, col;
       double val;
       fscanf(f, "%d %d %lg\n", &row, &col, &val);
-      this->cooRowIdx_gpu[0][i] = row - 1; // we're using coo, count from 0
-      this->cooColIdx_gpu[0][i] = col - 1;
-      this->cooVal_gpu[0][i] = val;
+      this->cooRowIdx[i] = row - 1; // we're using coo, count from 0
+      this->cooColIdx[i] = col - 1;
+      this->cooVal[i] = val;
     }
     // Sorting to ensure COO format
     sortByRow();
     fclose(f);
+
     if (n_gpu != 0 and policy != none) {
       // this is to replicate arrays on each GPU
       if (policy == replicate) {
-        // Skip the first GPU as it already has the data
-        for (unsigned i = 1; i < n_gpu; i++) {
-          // No need to
-          // CUDA_SAFE_CALL(cudaSetDevice(i));
+        // Do it in reverse so that the data is not prefectched to GPU0 while
+        // data are still required on the CPU side
+        for (unsigned i = n_gpu - 1; i >= 0; i--) {
+          if (i > 0) {
+            SAFE_ALOC_MANAGED(this->cooRowIdx_gpu[i], get_nnz_idx_size());
+            SAFE_ALOC_MANAGED(this->cooColIdx_gpu[i], get_nnz_idx_size());
+            SAFE_ALOC_MANAGED(this->cooVal_gpu[i], get_nnz_val_size());
 
-          SAFE_ALOC_MANAGED(this->cooRowIdx_gpu[i], get_nnz_idx_size());
-          SAFE_ALOC_MANAGED(this->cooColIdx_gpu[i], get_nnz_idx_size());
-          SAFE_ALOC_MANAGED(this->cooVal_gpu[i], get_nnz_val_size());
-
-          std::memcpy(cooRowIdx_gpu[i], cooRowIdx_gpu[0], get_nnz_idx_size());
-          std::memcpy(cooColIdx_gpu[i], cooColIdx_gpu[0], get_nnz_idx_size());
-          std::memcpy(cooVal_gpu[i], cooVal_gpu[0], get_nnz_val_size());
+            std::memcpy(cooRowIdx_gpu[i], cooRowIdx, get_nnz_idx_size());
+            std::memcpy(cooColIdx_gpu[i], cooColIdx, get_nnz_idx_size());
+            std::memcpy(cooVal_gpu[i], cooVal, get_nnz_val_size());
+          } else {
+            // No need to copy the same elements twice, GPU0 shares the same
+            // pointer as the other
+            cooRowIdx_gpu[i] = cooRowIdx;
+            cooColIdx_gpu[i] = cooColIdx;
+            cooVal_gpu[i] = cooVal;
+          }
 
           // Tuning to load stuff on GPU goes here
-
-          // CUDA_SAFE_CALL(cudaMemcpy(cooRowIdx_gpu[i], cooRowIdx,
-          //                           get_nnz_idx_size(),
-          //                           cudaMemcpyHostToDevice));
-          // CUDA_SAFE_CALL(cudaMemcpy(cooColIdx_gpu[i], cooColIdx,
-          //                           get_nnz_idx_size(),
-          //                           cudaMemcpyHostToDevice));
-          // CUDA_SAFE_CALL(cudaMemcpy(cooVal_gpu[i], cooVal,
-          // get_nnz_val_size(),
-          //                           cudaMemcpyHostToDevice));
         }
       }
+
       if (policy == segment) {
         SAFE_ALOC_HOST(nnz_gpu, n_gpu * sizeof(IdxType))
         IdxType avg_nnz = ceil(nnz / n_gpu);
         for (unsigned i = 0; i < n_gpu; i++) {
-          // CUDA_SAFE_CALL(cudaSetDevice(i));
           nnz_gpu[i] = min((i + 1) * avg_nnz, nnz) - i * avg_nnz;
 
-          // No need to allocate memory but just to set the pointers based on
-          // offset
-          cooRowIdx_gpu[i] = &cooRowIdx_gpu[0][i * avg_nnz];
-          cooColIdx_gpu[i] = &cooRowIdx_gpu[0][i * avg_nnz];
-          cooVal_gpu[i] = &cooRowIdx_gpu[0][i * avg_nnz];
+          cooRowIdx_gpu[i] = &cooRowIdx[i * avg_nnz];
+          cooColIdx_gpu[i] = &cooRowIdx[i * avg_nnz];
+          cooVal_gpu[i] = &cooRowIdx[i * avg_nnz];
+
           // use get_gpu_nnz_idx_size(i) and get_gpu_nnz_val_size(i) to deal
           // with tuning
-
-          // SAFE_ALOC_GPU(cooRowIdx_gpu[i], get_gpu_nnz_idx_size(i));
-          // SAFE_ALOC_GPU(cooColIdx_gpu[i], get_gpu_nnz_idx_size(i));
-          // SAFE_ALOC_GPU(cooVal_gpu[i], get_gpu_nnz_val_size(i));
-          // CUDA_SAFE_CALL(cudaMemcpy(cooRowIdx_gpu[i], &cooRowIdx[i *
-          // avg_nnz],
-          //                           get_gpu_nnz_idx_size(i),
-          //                           cudaMemcpyHostToDevice));
-          // CUDA_SAFE_CALL(cudaMemcpy(cooColIdx_gpu[i], &cooColIdx[i *
-          // avg_nnz],
-          //                           get_gpu_nnz_idx_size(i),
-          //                           cudaMemcpyHostToDevice));
-          // CUDA_SAFE_CALL(cudaMemcpy(cooVal_gpu[i], &cooVal[i * avg_nnz],
-          //                           get_gpu_nnz_val_size(i),
-          //                           cudaMemcpyHostToDevice));
         }
       }
     }
@@ -258,15 +250,15 @@ public:
         new struct CooElement<IdxType, DataType>[nnz];
     unsigned size = sizeof(struct CooElement<IdxType, DataType>);
     for (unsigned i = 0; i < nnz; i++) {
-      coo_arr[i].row = this->cooRowIdx_gpu[0][i];
-      coo_arr[i].col = this->cooColIdx_gpu[0][i];
-      coo_arr[i].val = this->cooVal_gpu[0][i];
+      coo_arr[i].row = this->cooRowIdx[i];
+      coo_arr[i].col = this->cooColIdx[i];
+      coo_arr[i].val = this->cooVal[i];
     }
     qsort(coo_arr, nnz, size, cmp_func<IdxType, DataType>);
     for (unsigned i = 0; i < nnz; i++) {
-      this->cooRowIdx_gpu[0][i] = coo_arr[i].row;
-      this->cooColIdx_gpu[0][i] = coo_arr[i].col;
-      this->cooVal_gpu[0][i] = coo_arr[i].val;
+      this->cooRowIdx[i] = coo_arr[i].row;
+      this->cooColIdx[i] = coo_arr[i].col;
+      this->cooVal[i] = coo_arr[i].val;
     }
     delete[] coo_arr;
   }
@@ -288,9 +280,9 @@ public:
   size_t get_nnz_val_size() { return nnz * sizeof(DataType); }
 
 public:
-  // IdxType *cooRowIdx;
-  // IdxType *cooColIdx;
-  // DataType *cooVal;
+  IdxType *cooRowIdx;
+  IdxType *cooColIdx;
+  DataType *cooVal;
 
   IdxType **cooRowIdx_gpu;
   IdxType **cooColIdx_gpu;
@@ -310,8 +302,8 @@ template <typename IdxType, typename DataType> class CsrSparseMatrix {
 public:
   CsrSparseMatrix() : nnz(0), height(0), width(0), n_gpu(0), policy(none) {
     this->csrRowPtr = NULL;
-    // this->csrColIdx = NULL;
-    // this->csrVal = NULL;
+    this->csrColIdx = NULL;
+    this->csrVal = NULL;
     this->csrRowPtr_gpu = NULL;
     this->csrColIdx_gpu = NULL;
     this->csrVal_gpu = NULL;
@@ -321,38 +313,33 @@ public:
   }
   ~CsrSparseMatrix() {
     SAFE_FREE_GPU(csrRowPtr);
-    // SAFE_FREE_HOST(csrColIdx);
-    // SAFE_FREE_HOST(csrVal);
-
     SAFE_FREE_MULTI_MANAGED(csrRowPtr_gpu, n_gpu);
 
     if (policy == replicate) {
       SAFE_FREE_MULTI_MANAGED(csrColIdx_gpu, n_gpu);
       SAFE_FREE_MULTI_MANAGED(csrVal_gpu, n_gpu);
-    } else {
+    } else if (policy == segment) {
       SAFE_FREE_MULTI_MANAGED(csrColIdx_gpu, 1);
       SAFE_FREE_MULTI_MANAGED(csrVal_gpu, 1);
+    } else {
+      SAFE_FREE_GPU(csrColIdx);
+      SAFE_FREE_GPU(csrVal);
     }
 
     SAFE_FREE_HOST(nnz_gpu);
     SAFE_FREE_HOST(starting_row_gpu);
     SAFE_FREE_HOST(stoping_row_gpu);
   }
-  CsrSparseMatrix(const char *filename, int _n_gpu)
-      : policy(none), n_gpu(_n_gpu) {
+  CsrSparseMatrix(const char *filename) : policy(none), n_gpu(0) {
     int m = 0, n = 0, nnzA = 0, isSymmetricA;
     mmio_info(&m, &n, &nnzA, &isSymmetricA, filename);
     this->height = (IdxType)m;
     this->width = (IdxType)n;
     this->nnz = (IdxType)nnzA;
 
-    csrRowPtr_gpu = new IdxType *[n_gpu];
-    csrColIdx_gpu = new IdxType *[n_gpu];
-    csrVal_gpu = new DataType *[n_gpu];
-
     SAFE_ALOC_MANAGED(this->csrRowPtr, get_row_ptr_size());
-    SAFE_ALOC_MANAGED(this->csrColIdx_gpu[0], get_col_idx_size());
-    SAFE_ALOC_MANAGED(this->csrVal_gpu[0], get_val_size());
+    SAFE_ALOC_MANAGED(this->csrColIdx, get_col_idx_size());
+    SAFE_ALOC_MANAGED(this->csrVal, get_val_size());
 
     int *csrRowPtrA = (int *)malloc((m + 1) * sizeof(int));
     int *csrColIdxA = (int *)malloc(nnzA * sizeof(int));
@@ -364,17 +351,17 @@ public:
       this->csrRowPtr[i] = (IdxType)csrRowPtrA[i];
     }
     for (int i = 0; i < nnzA; i++) {
-      this->csrColIdx_gpu[0][i] = (IdxType)csrColIdxA[i];
-      this->csrVal_gpu[0][i] = (DataType)csrValA[i];
+      this->csrColIdx[i] = (IdxType)csrColIdxA[i];
+      this->csrVal[i] = (DataType)csrValA[i];
     }
 
     free(csrRowPtrA);
     free(csrColIdxA);
     free(csrValA);
 
-    // this->csrRowPtr_gpu = NULL;
-    // this->csrColIdx_gpu = NULL;
-    // this->csrVal_gpu = NULL;
+    this->csrRowPtr_gpu = NULL;
+    this->csrColIdx_gpu = NULL;
+    this->csrVal_gpu = NULL;
     this->nnz_gpu = NULL;
     this->starting_row_gpu = NULL;
     this->stoping_row_gpu = NULL;
@@ -385,36 +372,27 @@ public:
     assert(this->n_gpu != 0);
     assert(this->policy != none);
     if (n_gpu != 0 and policy != none) {
-      // Already allocated
-      // SAFE_ALOC_HOST(csrRowPtr_gpu, n_gpu * sizeof(IdxType *));
-      // SAFE_ALOC_HOST(csrColIdx_gpu, n_gpu * sizeof(IdxType *));
-      // SAFE_ALOC_HOST(csrVal_gpu, n_gpu * sizeof(DataType *));
+      csrRowPtr_gpu = new IdxType *[n_gpu];
+      csrColIdx_gpu = new IdxType *[n_gpu];
+      csrVal_gpu = new DataType *[n_gpu];
       // this is to replicate arrays on each GPU
       if (policy == replicate) {
-        for (unsigned i = 0; i < n_gpu; i++) {
-          // CUDA_SAFE_CALL(cudaSetDevice(i));
-          SAFE_ALOC_MANAGED(csrRowPtr_gpu[i], get_row_ptr_size());
-          std::memcpy(csrRowPtr_gpu[i], csrRowPtr, get_row_ptr_size());
+        for (unsigned i = n_gpu - 1; i >= 0; i--) {
+          if (i == 0) {
+            csrRowPtr_gpu[i] = csrRowPtr;
+            csrColIdx_gpu[i] = csrColIdx;
+            csrVal_gpu[i] = csrVal;
+          } else {
+            SAFE_ALOC_MANAGED(csrRowPtr_gpu[i], get_row_ptr_size());
+            SAFE_ALOC_MANAGED(csrColIdx_gpu[i], get_col_idx_size());
+            SAFE_ALOC_MANAGED(csrVal_gpu[i], get_val_size());
 
-          if (i == 0)
-            continue;
-
-          SAFE_ALOC_MANAGED(csrColIdx_gpu[i], get_col_idx_size());
-          SAFE_ALOC_MANAGED(csrVal_gpu[i], get_val_size());
-
-          std::memcpy(csrColIdx_gpu[i], csrColIdx_gpu[0], get_col_idx_size());
-          std::memcpy(csrVal_gpu[i], csrVal_gpu[0], get_val_size());
+            std::memcpy(csrRowPtr_gpu[i], csrRowPtr, get_row_ptr_size());
+            std::memcpy(csrColIdx_gpu[i], csrColIdx, get_col_idx_size());
+            std::memcpy(csrVal_gpu[i], csrVal, get_val_size());
+          }
 
           // tuning goes here
-
-          // CUDA_SAFE_CALL(cudaMemcpy(csrRowPtr_gpu[i], csrRowPtr,
-          //                           get_row_ptr_size(),
-          //                           cudaMemcpyHostToDevice));
-          // CUDA_SAFE_CALL(cudaMemcpy(csrColIdx_gpu[i], csrColIdx,
-          //                           get_col_idx_size(),
-          //                           cudaMemcpyHostToDevice));
-          // CUDA_SAFE_CALL(cudaMemcpy(csrVal_gpu[i], csrVal, get_val_size(),
-          //                           cudaMemcpyHostToDevice));
         }
       } else if (policy == segment) {
         SAFE_ALOC_HOST(nnz_gpu, n_gpu * sizeof(IdxType));
@@ -430,11 +408,11 @@ public:
 
           nnz_gpu[i] = row_stoping_nnz - row_starting_nnz + 1;
 
-          starting_row_gpu[i] = csr_findRowIdxUsingNnzIdx(
-              csrRowPtr_gpu[0], height, row_starting_nnz);
+          starting_row_gpu[i] =
+              csr_findRowIdxUsingNnzIdx(csrRowPtr, height, row_starting_nnz);
 
-          stoping_row_gpu[i] = csr_findRowIdxUsingNnzIdx(
-              csrRowPtr_gpu[0], height, row_stoping_nnz);
+          stoping_row_gpu[i] =
+              csr_findRowIdxUsingNnzIdx(csrRowPtr, height, row_stoping_nnz);
 
           SAFE_ALOC_MANAGED(csrRowPtr_gpu[i], get_gpu_row_ptr_size(i));
 
@@ -444,15 +422,9 @@ public:
                 csrRowPtr[starting_row_gpu[i] + k] - i * avg_nnz;
           csrRowPtr_gpu[i][get_gpu_row_ptr_num(i) - 1] = nnz_gpu[i];
 
-          // SAFE_ALOC_GPU(csrRowPtr_gpu[i], get_gpu_row_ptr_size(i));
-
-          if (i == 0)
-            continue;
-          // GPU0 already has the data needed
-
           // Segments the data to the other GPUs
-          csrColIdx_gpu[i] = &csrColIdx_gpu[0][i * avg_nnz];
-          csrVal_gpu[i] = &csrVal_gpu[0][i * avg_nnz];
+          csrColIdx_gpu[i] = &csrColIdx[i * avg_nnz];
+          csrVal_gpu[i] = &csrVal[i * avg_nnz];
 
           printf("gpu-%d,start-row:%d,stop-row:%d,num-rows:%ld,num-nnz:%d\n", i,
                  starting_row_gpu[i], stoping_row_gpu[i],
@@ -502,8 +474,8 @@ public:
 public:
   // Must be used to store all rows and from it segment everything else
   IdxType *csrRowPtr;
-  // IdxType *csrColIdx;
-  // DataType *csrVal;
+  IdxType *csrColIdx;
+  DataType *csrVal;
 
   IdxType **csrRowPtr_gpu;
   IdxType **csrColIdx_gpu;
@@ -617,8 +589,14 @@ public:
 
     if (policy == replicate) {
       for (unsigned i = 0; i < n_gpu; i++) {
-        SAFE_ALOC_MANAGED(val_gpu[i], get_mtx_size());
-        std::memcpy(val_gpu[i], val, get_mtx_size());
+        if (i == 0) {
+          val_gpu[i] = val;
+        } else {
+          SAFE_ALOC_MANAGED(val_gpu[i], get_mtx_size());
+          std::memcpy(val_gpu[i], val, get_mtx_size());
+        }
+
+        // tuning
       }
     } else if (policy == segment) {
       SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
@@ -628,21 +606,21 @@ public:
       IdxType avg_val = ceil((double)first_order / n_gpu);
       for (unsigned i = 0; i < n_gpu; i++) {
         dim_gpu[i] = min((i + 1) * avg_val, first_order) - i * avg_val;
-        // SAFE_ALOC_MANAGED(val_gpu[i], second_order * get_dim_gpu_size(i));
         val_gpu[i] = &val[(i * avg_val) * second_order];
 
-        // std::memcpy(val_gpu[i], &val[(i * avg_val) * second_order],
-        //             second_order * get_dim_gpu_size(i));
+        // tuning SIZE --> second_order * get_dim_gpu_size(i)
       }
     }
   }
 
   ~DenseMatrix() {
-    SAFE_FREE_GPU(val);
     SAFE_FREE_HOST(dim_gpu);
 
-    if (policy == replicate)
+    if (policy == replicate) {
       SAFE_FREE_MULTI_GPU(val_gpu, n_gpu);
+    } else {
+      SAFE_FREE_GPU(val);
+    }
   }
 
   DenseMatrix *transpose() {
@@ -677,6 +655,8 @@ public:
       //     second_order * get_dim_gpu_size(i_gpu), cudaMemcpyDeviceToHost));
       CUDA_SAFE_CALL(cudaDeviceSynchronize());
     } else if (policy == replicate) {
+      // Should there be a cycle to reconstruct the whole matrix?
+      // For the tuning set the device as a way to prefetch the data
       // CUDA_SAFE_CALL(cudaSetDevice(i_gpu));
       // std::memcpy(val, val_gpu[i_gpu], get_mtx_size());
       // prefetch that to the host, host will access it
@@ -746,17 +726,19 @@ public:
   }
   DenseVector(const DenseVector &dv)
       : length(dv.length), n_gpu(dv.n_gpu), policy(dv.policy) {
-    SAFE_ALOC_MANAGED(val, get_vec_size());
-    memcpy(val, dv.val, get_vec_size());
-
     if (n_gpu != 0 && policy != none) {
       val_gpu = new DataType *[n_gpu];
       for (unsigned i = 0; i < n_gpu; i++) {
-        // CUDA_SAFE_CALL(cudaSetDevice(i));
+        CUDA_SAFE_CALL(cudaSetDevice(i));
         SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
         CUDA_SAFE_CALL(cudaMemcpy(val_gpu[i], dv.val_gpu[i], get_vec_size(),
                                   cudaMemcpyDeviceToDevice));
       }
+
+      val = val_gpu[0];
+    } else {
+      SAFE_ALOC_MANAGED(val, get_vec_size());
+      memcpy(val, dv.val, get_vec_size());
     }
   }
   void sync2gpu(unsigned _n_gpu, enum GpuSharePolicy _policy) {
@@ -769,11 +751,14 @@ public:
     if (policy == replicate) {
       val_gpu = new DataType *[n_gpu];
       for (unsigned i = 0; i < n_gpu; i++) {
-        // CUDA_SAFE_CALL(cudaSetDevice(i));
-        SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
-        std::memcpy(val_gpu[i], val, get_vec_size());
-        // CUDA_SAFE_CALL(cudaMemcpy(val_gpu[i], val, get_vec_size(),
-        //                           cudaMemcpyHostToDevice));
+        if (i == 0) {
+          val_gpu[i] = val;
+        } else {
+          SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
+          std::memcpy(val_gpu[i], val, get_vec_size());
+        }
+
+        // tuning
       }
     }
   }
@@ -802,8 +787,11 @@ public:
     }
   }
   ~DenseVector() {
-    SAFE_FREE_GPU(this->val);
-    SAFE_FREE_MULTI_GPU(val_gpu, n_gpu);
+    if (n_gpu > 0) {
+      SAFE_FREE_MULTI_MANAGED(val_gpu, n_gpu);
+    } else {
+      SAFE_FREE_GPU(this->val);
+    }
   }
   size_t get_vec_size() { return (size_t)length * sizeof(DataType); }
   size_t get_vec_length() { return (size_t)length; }
