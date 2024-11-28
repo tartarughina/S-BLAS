@@ -43,7 +43,7 @@ void sblas_spmm_csr_cpu(CsrSparseMatrix<IdxType, DataType> *pA,
       for (IdxType n = 0; n < pB->width; n++) {
         DataType sum = 0;
         for (IdxType j = pA->csrRowPtr[i]; j < pA->csrRowPtr[i + 1]; j++) {
-          IdxType col_A = pA->csrRowPtr[j];
+          IdxType col_A = pA->csrColIdx[j];
           DataType val_A = pA->csrVal[j];
           DataType val_B = pB->val[n * (pB->height) + col_A];
           sum += val_A * val_B;
@@ -57,7 +57,7 @@ void sblas_spmm_csr_cpu(CsrSparseMatrix<IdxType, DataType> *pA,
       for (IdxType n = 0; n < pB->width; n++) {
         DataType sum = 0;
         for (IdxType j = pA->csrRowPtr[i]; j < pA->csrRowPtr[i + 1]; j++) {
-          IdxType col_A = pA->csrRowPtr[j];
+          IdxType col_A = pA->csrColIdx[j];
           DataType val_A = pA->csrVal[j];
           DataType val_B = pB->val[n * (pB->height) + col_A];
           sum += val_A * val_B;
@@ -148,7 +148,6 @@ void sblas_spmm_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
                             static_cast<int64_t>(pA->height),
                             pC->val_gpu[i_gpu], valueType, CUSPARSE_ORDER_COL));
 
-    cout << "Matrices description completed" << endl;
     size_t bufferSize = 0;
     CHECK_CUSPARSE(cusparseSpMM_bufferSize(
         handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -294,11 +293,12 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
 #pragma omp barrier
     nccl_timer.stop_timer();
 
+    std::ostringstream oss;
+    oss << "GPU-" << i_gpu << " NCCL Time: " << nccl_timer.measure() << " ms."
+        << std::endl;
+
 #pragma omp critical
-    {
-      std::cout << "GPU-" << i_gpu << " NCCL Time: " << nccl_timer.measure()
-                << " ms." << std::endl;
-    }
+    { std::cout << oss.str(); }
 
     // Clean up
     cudaFree(externalBuffer);
