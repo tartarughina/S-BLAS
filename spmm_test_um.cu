@@ -61,29 +61,39 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   load_timer.start_timer();
   // CsrSparseMatrix<int, double> A("./ash85.mtx");
   CsrSparseMatrix<int, double> A(A_path);
+  cout << "Created matrix A" << endl;
   DenseMatrix<int, double> B(A.width, b_width, col_major);
+  cout << "Created matrix B" << endl;
   DenseMatrix<int, double> C(A.height, b_width, 1, col_major);
+  cout << "Created matrix C" << endl;
   DenseMatrix<int, double> C_cpu(A.height, b_width, 1, col_major);
+  cout << "Created matrix C_cpu" << endl;
 
   // Partition and Distribute
   A.sync2gpu(n_gpu, segment);
+  cout << "A sync done" << endl;
   B.sync2gpu(n_gpu, replicate);
+  cout << "B sync done" << endl;
   C.sync2gpu(n_gpu, replicate);
+  cout << "C sync done" << endl;
 
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   load_timer.stop_timer();
   run_timer.start_timer();
   sblas_spmm_csr_v2<int, double>(&A, &B, &C, alpha, beta, n_gpu);
+  cout << "CSR v2 completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_timer.stop_timer();
   run_cpu_timer.start_timer();
   sblas_spmm_csr_cpu<int, double>(&A, &B, &C_cpu, alpha, beta);
+  cout << "CSR CPU completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_cpu_timer.stop_timer();
   // get data back to CPU
   C.sync2cpu(0);
+  cout << "C synced back to CPU" << endl;
 
   print_1d_array(C.val, C.get_mtx_num());
   print_1d_array(C_cpu.val, C_cpu.get_mtx_num());
