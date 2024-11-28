@@ -250,6 +250,7 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
         pB->val_gpu[i_gpu], valueType, CUSPARSE_ORDER_COL));
 
     // Adjust matC for row-major C_copy
+    cusparseDnMatDescr_t matC;
     CHECK_CUSPARSE(cusparseCreateDnMat(
         &matC,
         static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) - 1), // Rows
