@@ -113,7 +113,7 @@ inline void __cusparseSafeCall(cusparseStatus_t err, const char *file,
   if ((X) != NULL) {                                                           \
     for (unsigned i = 0; i < (Y); i++)                                         \
       if (((X)[i]) != NULL) {                                                  \
-        SAFE_FREE_GPU((X)[i]);                                                 \
+        CUDA_SAFE_CALL(cudaFree((X)[i]));                                      \
       }                                                                        \
     std::free(X);                                                              \
     (X) = NULL;                                                                \
