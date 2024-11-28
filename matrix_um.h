@@ -588,7 +588,7 @@ public:
     val_gpu = new DataType *[n_gpu];
 
     if (policy == replicate) {
-      for (unsigned i = 0; i < n_gpu; i++) {
+      for (unsigned i = n_gpu - 1; i >= 0; i--) {
         if (i == 0) {
           val_gpu[i] = val;
         } else {
@@ -750,7 +750,7 @@ public:
                                      // partition
     if (policy == replicate) {
       val_gpu = new DataType *[n_gpu];
-      for (unsigned i = 0; i < n_gpu; i++) {
+      for (unsigned i = n_gpu - 1; i >= 0; i--) {
         if (i == 0) {
           val_gpu[i] = val;
         } else {
