@@ -271,7 +271,7 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
     }
 
     // Clean up
-    cudaFree(externalBuffer);
+    cudaFree(dBuffer);
     CHECK_CUSPARSE(cusparseDestroySpMat(matA));
     CHECK_CUSPARSE(cusparseDestroyDnMat(matB));
     CHECK_CUSPARSE(cusparseDestroyDnMat(matC));
