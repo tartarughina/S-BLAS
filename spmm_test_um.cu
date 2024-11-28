@@ -20,43 +20,34 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
                  unsigned n_gpu) {
   cpu_timer load_timer, run_timer, run_cpu_timer;
   load_timer.start_timer();
-  CsrSparseMatrix<int, double> A(A_path, n_gpu);
-  cout << "CSR matrix A created" << endl;
+  CsrSparseMatrix<int, double> A(A_path);
   DenseMatrix<int, double> B(A.width, b_width, col_major);
-  cout << "Dense matrix B created" << endl;
   DenseMatrix<int, double> C(A.height, b_width, 1, col_major);
-  cout << "Dense matrix C created" << endl;
   DenseMatrix<int, double> C_cpu(A.height, b_width, 1, col_major);
-  cout << "Dense matrix C_cpu created" << endl;
   // Partition and Distribute
   A.sync2gpu(n_gpu, replicate);
-  cout << "A synced to GPU" << endl;
   B.sync2gpu(n_gpu, segment);
-  cout << "B synced to GPU" << endl;
   C.sync2gpu(n_gpu, segment);
-  cout << "C synced to GPU" << endl;
 
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   load_timer.stop_timer();
 
   run_timer.start_timer();
   sblas_spmm_csr_v1<int, double>(&A, &B, &C, alpha, beta, n_gpu);
-  cout << "sblas_spmm_csr_v1 completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_timer.stop_timer();
 
   run_cpu_timer.start_timer();
   sblas_spmm_csr_cpu<int, double>(&A, &B, &C_cpu, alpha, beta);
-  cout << "sblas_spmm_csr_cpu completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_cpu_timer.stop_timer();
 
-  // print_1d_array(C_cpu.val,C_cpu.get_mtx_num());
-  // print_1d_array(C.val,C.get_mtx_num());
+  // print_1d_array(C_cpu.val, C_cpu.get_mtx_num());
+  // print_1d_array(C.val, C.get_mtx_num());
 
-  bool correct = check_equal(C_cpu.val, C.val_gpu[0], C.get_mtx_num());
+  bool correct = check_equal(C_cpu.val, C.val, C.get_mtx_num());
   cout << "Validation = " << (correct ? "True" : "False") << endl;
   cout << "Load Time: " << load_timer.measure() << "ms." << endl;
   cout << n_gpu << "-GPUs Run Time: " << run_timer.measure() << " ms." << endl;
@@ -69,48 +60,43 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   cpu_timer load_timer, run_timer, run_cpu_timer;
   load_timer.start_timer();
   // CsrSparseMatrix<int, double> A("./ash85.mtx");
-  CsrSparseMatrix<int, double> A(A_path, n_gpu);
-  cout << "CSR matrix A created" << endl;
+  CsrSparseMatrix<int, double> A(A_path);
   DenseMatrix<int, double> B(A.width, b_width, col_major);
-  cout << "Dense matrix B created" << endl;
   DenseMatrix<int, double> C(A.height, b_width, 1, col_major);
-  cout << "Dense matrix C created" << endl;
   DenseMatrix<int, double> C_cpu(A.height, b_width, 1, col_major);
-  cout << "Dense matrix C_cpu created" << endl;
 
   // Partition and Distribute
   A.sync2gpu(n_gpu, segment);
-  cout << "A synced to GPU" << endl;
   B.sync2gpu(n_gpu, replicate);
-  cout << "B synced to GPU" << endl;
   C.sync2gpu(n_gpu, replicate);
-  cout << "C synced to GPU" << endl;
 
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   load_timer.stop_timer();
   run_timer.start_timer();
   sblas_spmm_csr_v2<int, double>(&A, &B, &C, alpha, beta, n_gpu);
-  cout << "sblas_spmm_csr_v2 completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_timer.stop_timer();
   run_cpu_timer.start_timer();
   sblas_spmm_csr_cpu<int, double>(&A, &B, &C_cpu, alpha, beta);
-  cout << "sblas_spmm_csr_cpu completed" << endl;
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_cpu_timer.stop_timer();
   // get data back to CPU
   C.sync2cpu(0);
-  // print_1d_array(C.val,C.get_mtx_num());
-  // print_1d_array(C_cpu.val,C_cpu.get_mtx_num());
-  bool correct = check_equal(C_cpu.val, C.val_gpu[0], C.get_mtx_num());
+
+  print_1d_array(C.val, C.get_mtx_num());
+  print_1d_array(C_cpu.val, C_cpu.get_mtx_num());
+
+  bool correct = check_equal(C_cpu.val, C.val, C.get_mtx_num());
   cout << "Validation = " << (correct ? "True" : "False") << endl;
   cout << "Load Time: " << load_timer.measure() << "ms." << endl;
   cout << n_gpu << "-GPUs Run Time: " << run_timer.measure() << " ms." << endl;
   cout << "CPU Run Time: " << run_cpu_timer.measure() << " ms." << endl;
   return correct;
 }
+
+// NCCL is exectuted in the 2 method, where mat A is partitioned
 
 int main(int argc, char *argv[]) {
   if (argc != 7) {
