@@ -295,12 +295,11 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
 #pragma omp barrier
     nccl_timer.stop_timer();
 
-    ostringstream oss;
-    oss << "GPU-" << i_gpu << " NCCL Time: " << nccl_timer.measure() << " ms."
-        << std::endl;
-
 #pragma omp critical
-    { cout << oss.str(); }
+    {
+      cout << "GPU-" << i_gpu << " NCCL Time: " << nccl_timer.measure()
+           << " ms." << std::endl;
+    }
 
     // Clean up
     cudaFree(externalBuffer);
