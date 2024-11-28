@@ -249,16 +249,16 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
         static_cast<int64_t>(pB->width), static_cast<int64_t>(pB->height),
         pB->val_gpu[i_gpu], valueType, CUSPARSE_ORDER_COL));
 
-    // Create dense matrix descriptor for C_copy
-    cusparseDnMatDescr_t matC;
+    // Adjust matC for row-major C_copy
     CHECK_CUSPARSE(cusparseCreateDnMat(
         &matC,
-        static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) -
-                             1),         // Number of rows
-        static_cast<int64_t>(pB->width), // Number of columns
+        static_cast<int64_t>(pA->get_gpu_row_ptr_num(i_gpu) - 1), // Rows
+        static_cast<int64_t>(pB->width),                          // Columns
         static_cast<int64_t>(pB->width), // Leading dimension (ldc)
-        &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu]], // Data pointer
-        valueType, CUSPARSE_ORDER_ROW));
+        &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu] *
+                                 pB->width], // Data pointer
+        valueType,
+        CUSPARSE_ORDER_ROW)); // Specify row-major order
 
     // Set alpha and beta
     DataType dummy_alpha = static_cast<DataType>(1.0);
@@ -287,10 +287,12 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
     // NCCL AllReduce to sum partial results
     gpu_timer nccl_timer;
     nccl_timer.start_timer();
-    CHECK_NCCL(ncclAllReduce(C_copy.val_gpu[i_gpu], C_copy.val_gpu[i_gpu],
-                             C_copy.get_mtx_num(),
-                             (valueType == CUDA_R_64F) ? ncclDouble : ncclFloat,
-                             ncclSum, comm[i_gpu], 0));
+    size_t num_elements = (pA->get_gpu_row_ptr_num(i_gpu) - 1) * pB->width;
+    CHECK_NCCL(ncclAllReduce(
+        &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu] * pB->width],
+        &(C_copy.val_gpu[i_gpu])[pA->starting_row_gpu[i_gpu] * pB->width],
+        num_elements, (valueType == CUDA_R_64F) ? ncclDouble : ncclFloat,
+        ncclSum, comm[i_gpu], 0));
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
 #pragma omp barrier
     nccl_timer.stop_timer();
