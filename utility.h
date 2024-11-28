@@ -299,4 +299,20 @@ IdxType csr_findRowIdxUsingNnzIdx(const IdxType *rowPtr, IdxType height,
   return -1;
 }
 
+template <typename T> cudaDataType getCudaDataType();
+
+template <> cudaDataType getCudaDataType<float>() { return CUDA_R_32F; }
+
+template <> cudaDataType getCudaDataType<double>() { return CUDA_R_64F; }
+
+template <typename T> cusparseIndexType_t getCusparseIndexType();
+
+template <> cusparseIndexType_t getCusparseIndexType<int32_t>() {
+  return CUSPARSE_INDEX_32I;
+}
+
+template <> cusparseIndexType_t getCusparseIndexType<int64_t>() {
+  return CUSPARSE_INDEX_64I;
+}
+
 #endif
