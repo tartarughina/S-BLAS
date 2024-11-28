@@ -208,7 +208,7 @@ public:
       if (policy == replicate) {
         // Do it in reverse so that the data is not prefectched to GPU0 while
         // data are still required on the CPU side
-        for (unsigned i = n_gpu - 1; i >= 0; i--) {
+        for (unsigned i = 0; i < n_gpu; i++) {
           if (i > 0) {
             SAFE_ALOC_MANAGED(this->cooRowIdx_gpu[i], get_nnz_idx_size());
             SAFE_ALOC_MANAGED(this->cooColIdx_gpu[i], get_nnz_idx_size());
@@ -224,7 +224,8 @@ public:
             cooColIdx_gpu[i] = cooColIdx;
             cooVal_gpu[i] = cooVal;
           }
-
+        }
+        for (unsigned i = 0; i < n_gpu; i++) {
           // Tuning to load stuff on GPU goes here
         }
       }
@@ -236,8 +237,8 @@ public:
           nnz_gpu[i] = min((i + 1) * avg_nnz, nnz) - i * avg_nnz;
 
           cooRowIdx_gpu[i] = &cooRowIdx[i * avg_nnz];
-          cooColIdx_gpu[i] = &cooRowIdx[i * avg_nnz];
-          cooVal_gpu[i] = &cooRowIdx[i * avg_nnz];
+          cooColIdx_gpu[i] = &cooColIdx[i * avg_nnz];
+          cooVal_gpu[i] = &cooVal[i * avg_nnz];
 
           // use get_gpu_nnz_idx_size(i) and get_gpu_nnz_val_size(i) to deal
           // with tuning
@@ -377,7 +378,7 @@ public:
       csrVal_gpu = new DataType *[n_gpu];
       // this is to replicate arrays on each GPU
       if (policy == replicate) {
-        for (unsigned i = n_gpu - 1; i >= 0; i--) {
+        for (unsigned i = 0; i < n_gpu; i++) {
           if (i == 0) {
             csrRowPtr_gpu[i] = csrRowPtr;
             csrColIdx_gpu[i] = csrColIdx;
@@ -391,7 +392,9 @@ public:
             std::memcpy(csrColIdx_gpu[i], csrColIdx, get_col_idx_size());
             std::memcpy(csrVal_gpu[i], csrVal, get_val_size());
           }
+        }
 
+        for (unsigned i = 0; i < n_gpu; i++) {
           // tuning goes here
         }
       } else if (policy == segment) {
@@ -429,9 +432,10 @@ public:
           printf("gpu-%d,start-row:%d,stop-row:%d,num-rows:%ld,num-nnz:%d\n", i,
                  starting_row_gpu[i], stoping_row_gpu[i],
                  get_gpu_row_ptr_num(i), nnz_gpu[i]);
-          /*printf("=======RowPtr==========\n");*/
-          /*print_1d_array(fixedRowPtr,get_gpu_row_ptr_num(i));*/
-          // SAFE_FREE_HOST(fixedRowPtr);
+        }
+
+        for (unsigned i = 0; i < n_gpu; i++) {
+          // tuning goes here
         }
       }
     }
@@ -586,16 +590,19 @@ public:
     assert(this->policy != none);
 
     val_gpu = new DataType *[n_gpu];
+    cout << "Allocated GPUs pointers" << endl;
 
     if (policy == replicate) {
-      for (unsigned i = n_gpu - 1; i >= 0; i--) {
+      for (unsigned i = 0; i < n_gpu; i++) {
         if (i == 0) {
           val_gpu[i] = val;
         } else {
           SAFE_ALOC_MANAGED(val_gpu[i], get_mtx_size());
           std::memcpy(val_gpu[i], val, get_mtx_size());
         }
+      }
 
+      for (unsigned i = 0; i < n_gpu; i++) {
         // tuning
       }
     } else if (policy == segment) {
@@ -607,7 +614,9 @@ public:
       for (unsigned i = 0; i < n_gpu; i++) {
         dim_gpu[i] = min((i + 1) * avg_val, first_order) - i * avg_val;
         val_gpu[i] = &val[(i * avg_val) * second_order];
+      }
 
+      for (unsigned i = 0; i < n_gpu; i++) {
         // tuning SIZE --> second_order * get_dim_gpu_size(i)
       }
     }
@@ -750,14 +759,19 @@ public:
                                      // partition
     if (policy == replicate) {
       val_gpu = new DataType *[n_gpu];
-      for (unsigned i = n_gpu - 1; i >= 0; i--) {
+      for (unsigned i = 0; i < n_gpu; i++) {
         if (i == 0) {
           val_gpu[i] = val;
         } else {
           SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
           std::memcpy(val_gpu[i], val, get_vec_size());
         }
-
+      }
+      // Tuning goes in another loop as val is required in the previous loop to
+      // be in the CPU Unless the copy is done on the GPU, at that point the
+      // tuning needs to be done only on the i == 0 iteration and at that point
+      // everything is fine
+      for (unsigned i = 0; i < n_gpu; i++) {
         // tuning
       }
     }
