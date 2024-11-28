@@ -44,10 +44,10 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_cpu_timer.stop_timer();
 
-  cout << "GPU result" << endl;
-  print_1d_array(C.val, C.get_mtx_num());
-  cout << "CPU result" << endl;
-  print_1d_array(C_cpu.val, C_cpu.get_mtx_num());
+  // cout << "GPU result" << endl;
+  // print_1d_array(C.val, C.get_mtx_num());
+  // cout << "CPU result" << endl;
+  // print_1d_array(C_cpu.val, C_cpu.get_mtx_num());
 
   bool correct = check_equal(C_cpu.val, C.val, C.get_mtx_num());
   cout << "Validation = " << (correct ? "True" : "False") << endl;
