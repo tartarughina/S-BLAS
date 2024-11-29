@@ -57,3 +57,4 @@ int main(int argc, char *argv[]) {
   spmvCsrTest(A_path, alpha, beta, gpus);
 
   return 0;
+}
