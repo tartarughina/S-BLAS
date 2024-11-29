@@ -13,7 +13,6 @@
 
 # environment parameters
 CUDA_INSTALL_PATH ?= ${NVIDIA_PATH}/cuda
-CUDA_SAMPLES_PATH ?= /usr/local/cuda/samples
 CUDA_MATH_PATH ?= ${NVIDIA_PATH}/math_libs
 CUDA_COMM_PATH ?= ${NVIDIA_PATH}/comm_libs/nccl
 #compiler
@@ -26,7 +25,7 @@ NVCC_FLAGS = -O3 -w -m64 -gencode=arch=compute_80,code=compute_80
 #debugging
 #NVCC_FLAGS = -O0 -g -G -m64 -gencode=arch=compute_70,code=compute_70
 
-CUDA_INCLUDES = -I$(CUDA_INSTALL_PATH)/include -I$(CUDA_SAMPLES_PATH)/common/inc -I$(CUDA_MATH_PATH)/include -I$(CUDA_COMM_PATH)/include
+CUDA_INCLUDES = -I$(CUDA_INSTALL_PATH)/include -I$(CUDA_MATH_PATH)/include -I$(CUDA_COMM_PATH)/include
 CUDA_LIBS = -L$(CUDA_INSTALL_PATH)/lib64 -L$(CUDA_MATH_PATH)/lib64 -L$(CUDA_COMM_PATH)/lib -lcudart -lcusparse -Xcompiler -fopenmp -lnccl
 
 all: unit_test spmm_test spmm_test_um
@@ -40,5 +39,10 @@ spmm_test: spmm_test.cu matrix.h spmv.h spmm.h mmio_highlevel.h kernel.h utility
 spmm_test_um: spmm_test_um.cu matrix_um.h spmv_um.h spmm_um.h mmio_highlevel.h kernel.h utility.h
 	$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmm_test_um.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
 
+spmv_test: spmv_test.cu matrix.h spmv.h spmm.h mmio_highlevel.h kernel.h utility.h
+$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmv_test.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
+
+spmv_test_um: spmv_test_um.cu matrix_um.h spmv_um.h spmm_um.h mmio_highlevel.h kernel.h utility.h
+	$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmv_test_um.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
 clean:
 	rm unit_test spmm_test spmm_test_um
