@@ -40,7 +40,7 @@ spmm_test_um: spmm_test_um.cu matrix_um.h spmv_um.h spmm_um.h mmio_highlevel.h k
 	$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmm_test_um.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
 
 spmv_test: spmv_test.cu matrix.h spmv.h spmm.h mmio_highlevel.h kernel.h utility.h
-$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmv_test.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
+	$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmv_test.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
 
 spmv_test_um: spmv_test_um.cu matrix_um.h spmv_um.h spmm_um.h mmio_highlevel.h kernel.h utility.h
 	$(NVCC) -ccbin $(CC) $(NVCC_FLAGS) spmv_test_um.cu  $(CUDA_INCLUDES) $(CUDA_LIBS) -o $@
