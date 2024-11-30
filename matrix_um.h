@@ -973,6 +973,9 @@ public:
     // Remember to call GPU tuning and before CPU operation remove it
   }
 
+  // Prefetch may benefit from different streams being used however, as the
+  // original code used standard cudaMemcpy, using the async feature would be
+  // cheating, or at least that's what I think
   void applyGpuTuning(bool readOnly = true) {
     cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseSetReadMostly
                                          : cudaMemAdviseSetPreferredLocation;

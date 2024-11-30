@@ -42,7 +42,7 @@ bool spmvCsrTest(const char *A_path, double alpha, double beta, unsigned n_gpu,
     C.applyCpuTuning();
 
     C_cpu.applyCpuTuning();
-    B.sync2cpu(0);
+    B.sync2cpu(0, tuning);
   }
 
   // CPU Baseline
@@ -58,8 +58,9 @@ bool spmvCsrTest(const char *A_path, double alpha, double beta, unsigned n_gpu,
   bool correct = check_equal(C_cpu.val, C.val, C.get_vec_length());
   cout << "Validation = " << (correct ? "True" : "False") << endl;
   cout << "Load Time: " << load_timer.measure() << "ms." << endl;
-  cout << "CPU Run Time: " << run_cpu_timer.measure() << " ms." << endl;
   cout << n_gpu << "-GPUs Run Time: " << run_timer.measure() << " ms." << endl;
+  cout << "CPU Run Time: " << run_cpu_timer.measure() << " ms." << endl;
+
   return correct;
 }
 
