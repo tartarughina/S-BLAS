@@ -865,16 +865,13 @@ public:
             val_gpu[i_gpu], second_order * get_dim_gpu_size(i_gpu),
             cudaCpuDeviceId));
       }
-
-      CUDA_SAFE_CALL(cudaDeviceSynchronize());
     } else if (policy == replicate) {
       if (tuning) {
         CUDA_SAFE_CALL(cudaMemPrefetchAsync(val_gpu[i_gpu], get_mtx_size(),
                                             cudaCpuDeviceId));
       }
-
-      CUDA_SAFE_CALL(cudaDeviceSynchronize());
     }
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
   void plusDenseMatrixGPU(DenseMatrix const &dm, DataType alpha,
                           DataType beta) {

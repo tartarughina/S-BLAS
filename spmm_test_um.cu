@@ -108,13 +108,11 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
     C.removeGpuTuning(false);
 
     A.applyCpuTuning();
-
     B.applyCpuTuning();
-    B.sync2cpu(0, tuning);
-
     C.applyCpuTuning();
 
     C_cpu.applyCpuTuning();
+    B.sync2cpu(0, tuning);
   }
 
   run_cpu_timer.start_timer();

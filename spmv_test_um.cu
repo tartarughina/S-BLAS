@@ -38,13 +38,11 @@ bool spmvCsrTest(const char *A_path, double alpha, double beta, unsigned n_gpu,
     C.removeGpuTuning(false);
 
     A.applyCpuTuning();
-
     B.applyCpuTuning();
-    B.sync2cpu(0);
-
     C.applyCpuTuning();
 
     C_cpu.applyCpuTuning();
+    B.sync2cpu(0);
   }
 
   // CPU Baseline
