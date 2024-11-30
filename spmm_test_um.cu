@@ -17,7 +17,7 @@
 #include "spmm_um.h"
 
 bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
-                 unsigned n_gpu) {
+                 unsigned n_gpu, bool tuning) {
   cpu_timer load_timer, run_timer, run_cpu_timer;
   load_timer.start_timer();
   CsrSparseMatrix<int, double> A(A_path);
@@ -29,6 +29,12 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
   B.sync2gpu(n_gpu, segment);
   C.sync2gpu(n_gpu, segment);
 
+  if (tuning) {
+    A.applyGpuTuning();
+    B.applyGpuTuning();
+    C.applyGpuTuning(false);
+  }
+
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   load_timer.stop_timer();
 
@@ -37,6 +43,16 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_timer.stop_timer();
+
+  if (tuning) {
+    A.removeGpuTuning();
+    B.removeGpuTuning();
+    C.removeGpuTuning(false);
+
+    A.applyCpuTuning();
+    B.applyCpuTuning();
+    C.applyCpuTuning();
+  }
 
   run_cpu_timer.start_timer();
   sblas_spmm_csr_cpu<int, double>(&A, &B, &C_cpu, alpha, beta);
@@ -58,7 +74,7 @@ bool spmmCsrTest(const char *A_path, int b_width, double alpha, double beta,
 }
 
 bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
-                  unsigned n_gpu) {
+                  unsigned n_gpu, bool tuning) {
   cpu_timer load_timer, run_timer, run_cpu_timer;
   load_timer.start_timer();
   // CsrSparseMatrix<int, double> A("./ash85.mtx");
@@ -72,6 +88,12 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   B.sync2gpu(n_gpu, replicate);
   C.sync2gpu(n_gpu, replicate);
 
+  if (tuning) {
+    A.applyGpuTuning();
+    B.applyGpuTuning();
+    C.applyGpuTuning(false);
+  }
+
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   load_timer.stop_timer();
   run_timer.start_timer();
@@ -79,13 +101,30 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_timer.stop_timer();
+
+  if (tuning) {
+    A.removeGpuTuning();
+    B.removeGpuTuning();
+    C.removeGpuTuning(false);
+
+    A.applyCpuTuning();
+
+    B.applyCpuTuning();
+    B.sync2cpu(0, tuning);
+
+    C.applyCpuTuning();
+
+    C_cpu.applyCpuTuning();
+  }
+
   run_cpu_timer.start_timer();
   sblas_spmm_csr_cpu<int, double>(&A, &B, &C_cpu, alpha, beta);
   CUDA_CHECK_ERROR();
   CUDA_SAFE_CALL(cudaDeviceSynchronize());
   run_cpu_timer.stop_timer();
   // get data back to CPU
-  C.sync2cpu(0);
+  //
+  C.sync2cpu(0, tuning);
 
   // cout << "GPU result" << endl;
   // print_1d_array(C.val, C.get_mtx_num());
@@ -103,9 +142,9 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
 // NCCL is exectuted in the 2 method, where mat A is partitioned
 
 int main(int argc, char *argv[]) {
-  if (argc != 7) {
+  if (argc < 7) {
     cerr << "./spmm_test method(1:partition-B, 2:partition-A) \
-            A_path B_width alpha beta gpus"
+            A_path B_width alpha beta gpus tuning (optional, false by default)"
          << endl;
     exit(1);
   }
@@ -116,11 +155,12 @@ int main(int argc, char *argv[]) {
   const double alpha = atof(argv[4]);
   const double beta = atof(argv[5]);
   const unsigned gpus = atoi(argv[6]);
+  const bool tuning = argc > 7 ? atoi(argv[7]) == 1 : false;
+
   if (method == 1) {
-    spmmCsrTest(A_path, B_width, alpha, beta, gpus);
+    spmmCsrTest(A_path, B_width, alpha, beta, gpus, tuning);
   } else if (method == 2) {
-    spmmCsrTest2(A_path, B_width, alpha, beta, gpus);
-    // spmmCsrTest2(256,3.0,4.0,4);
+    spmmCsrTest2(A_path, B_width, alpha, beta, gpus, tuning);
   } else {
     cerr << "Method can be only 1 or 2." << endl;
     exit(1);
