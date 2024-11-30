@@ -790,10 +790,10 @@ public:
 
       for (unsigned i = 0; i < n_gpu; i++) {
         CUDA_SAFE_CALL(cudaMemAdvise(
-            val_gpu[i_gpu], second_order * get_dim_gpu_size(i_gpu), advise, i));
+            val_gpu[i], second_order * get_dim_gpu_size(i), advise, i));
 
         CUDA_SAFE_CALL(cudaMemPrefetchAsync(
-            val_gpu[i_gpu], second_order * get_dim_gpu_size(i_gpu), i));
+            val_gpu[i], second_order * get_dim_gpu_size(i), i));
       }
     }
   }
@@ -808,9 +808,9 @@ public:
       }
     } else if (this->policy == segment) {
       for (unsigned i = 0; i < n_gpu; i++) {
-        CUDA_SAFE_CALL(cudaMemAdvise(val_gpu[i_gpu],
+        CUDA_SAFE_CALL(cudaMemAdvise(val_gpu[i],
                                      ((order == row_major) ? width : height) *
-                                         get_dim_gpu_size(i_gpu),
+                                         get_dim_gpu_size(i),
                                      advise, i));
       }
     }
@@ -869,8 +869,8 @@ public:
       CUDA_SAFE_CALL(cudaDeviceSynchronize());
     } else if (policy == replicate) {
       if (tuning) {
-        CUDA_SAFE_CALL(
-            cudaMemPrefetchAsync(val_gpu[i], get_mtx_size(), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(val_gpu[i_gpu], get_mtx_size(),
+                                            cudaCpuDeviceId));
       }
 
       CUDA_SAFE_CALL(cudaDeviceSynchronize());
@@ -1015,8 +1015,8 @@ public:
     assert(val_gpu != NULL);
 
     if (tuning) {
-      CUDA_SAFE_CALL(
-          cudaMemPrefetchAsync(val_gpu[i], get_vec_size(), cudaCpuDeviceId));
+      CUDA_SAFE_CALL(cudaMemPrefetchAsync(val_gpu[i_gpu], get_vec_size(),
+                                          cudaCpuDeviceId));
     }
 
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
