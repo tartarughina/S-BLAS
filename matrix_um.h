@@ -768,7 +768,7 @@ public:
     if (policy == replicate) {
 
       for (unsigned i = 0; i < n_gpu; i++) {
-        nvtxRangePush("Replicating matrix to gpu %d", i);
+        nvtxRangePush("Replicating matrix to GPU");
         if (i == 0) {
           val_gpu[i] = val;
         } else {
@@ -938,16 +938,20 @@ public:
     this->val_gpu = NULL;
     SAFE_ALOC_MANAGED(this->val, get_vec_size());
     srand(RAND_INIT_SEED);
+    nvtxRangePush("Randomizing vector");
     for (IdxType i = 0; i < this->get_vec_length(); i++)
       (this->val)[i] = (DataType)rand0to1();
+    nvtxRangePop();
   }
   DenseVector(IdxType _length, DataType _val)
       : length(_length), n_gpu(0), policy(none) {
     this->val_gpu = NULL;
     SAFE_ALOC_MANAGED(this->val, get_vec_size());
     srand(RAND_INIT_SEED);
+    nvtxRangePush("Filling vector");
     for (IdxType i = 0; i < this->get_vec_length(); i++)
       (this->val)[i] = _val;
+    nvtxRangePop();
   }
   DenseVector(const DenseVector &dv)
       : length(dv.length), n_gpu(dv.n_gpu), policy(dv.policy) {
@@ -975,13 +979,16 @@ public:
                                      // partition
     if (policy == replicate) {
       val_gpu = new DataType *[n_gpu];
+
       for (unsigned i = 0; i < n_gpu; i++) {
+        nvtxRangePush("Replicating vector to GPU");
         if (i == 0) {
           val_gpu[i] = val;
         } else {
           SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
           std::memcpy(val_gpu[i], val, get_vec_size());
         }
+        nvtxRangePop();
       }
     }
 
