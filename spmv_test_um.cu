@@ -10,10 +10,18 @@ bool spmvCsrTest(const char *A_path, double alpha, double beta, unsigned n_gpu,
   load_timer.start_timer();
   // Correct
   nvtxRangePush("Matrix and Vectors Allocation");
+  nvtxRangePush("A creation");
   CsrSparseMatrix<int, double> A(A_path);
+  nvtxRangePop();
+  nvtxRangePush("B creation");
   DenseVector<int, double> B(A.width, 1.);
+  nvtxRangePop();
+  nvtxRangePush("C creation");
   DenseVector<int, double> C(A.height, 1.);
+  nvtxRangePop();
+  nvtxRangePush("C_cpu creation");
   DenseVector<int, double> C_cpu(A.height, 1.);
+  nvtxRangePop();
   nvtxRangePop();
   // Partition and Distribute
   nvtxRangePush("A Distribution");

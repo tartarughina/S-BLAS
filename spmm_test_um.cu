@@ -80,10 +80,18 @@ bool spmmCsrTest2(const char *A_path, int b_width, double alpha, double beta,
   load_timer.start_timer();
   // CsrSparseMatrix<int, double> A("./ash85.mtx");
   nvtxRangePush("Matrices Allocation");
+  nvtxRangePush("A creation");
   CsrSparseMatrix<int, double> A(A_path);
+  nvtxRangePop();
+  nvtxRangePush("B creation");
   DenseMatrix<int, double> B(A.width, b_width, col_major);
+  nvtxRangePop();
+  nvtxRangePush("C creation");
   DenseMatrix<int, double> C(A.height, b_width, 1, col_major);
+  nvtxRangePop();
+  nvtxRangePush("C_cpu creation");
   DenseMatrix<int, double> C_cpu(A.height, b_width, 1, col_major);
+  nvtxRangePop();
   nvtxRangePop();
   // Partition and Distribute
   nvtxRangePush("A Distribution");
