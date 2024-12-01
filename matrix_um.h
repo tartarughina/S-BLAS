@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <nvtx3/nvToolsExt.h>
+
 using namespace std;
 
 // Multi-GPU sparse data sharing policy:
@@ -430,13 +432,17 @@ public:
     mmio_data(csrRowPtrA, csrColIdxA, csrValA, filename);
     printf("input matrix A: ( %i, %i ) nnz = %i\n", m, n, nnzA);
 
+    nvtxRangePush("Casting csrRow");
     for (int i = 0; i < m + 1; i++) {
       this->csrRowPtr[i] = (IdxType)csrRowPtrA[i];
     }
+    nvtxRangePop();
+    nvtxRangePush("Casting csrCol and csrVal");
     for (int i = 0; i < nnzA; i++) {
       this->csrColIdx[i] = (IdxType)csrColIdxA[i];
       this->csrVal[i] = (DataType)csrValA[i];
     }
+    nvtxRangePop();
 
     free(csrRowPtrA);
     free(csrColIdxA);
@@ -476,9 +482,11 @@ public:
           }
         }
       } else if (policy == segment) {
+        nvtxRangePush("Host Allocation");
         SAFE_ALOC_HOST(nnz_gpu, n_gpu * sizeof(IdxType));
         SAFE_ALOC_HOST(starting_row_gpu, n_gpu * sizeof(IdxType));
         SAFE_ALOC_HOST(stoping_row_gpu, n_gpu * sizeof(IdxType));
+        nvtxRangePop();
 
         IdxType avg_nnz = ceil((float)nnz / n_gpu);
 
@@ -496,16 +504,19 @@ public:
               csr_findRowIdxUsingNnzIdx(csrRowPtr, height, row_stoping_nnz);
 
           SAFE_ALOC_MANAGED(csrRowPtr_gpu[i], get_gpu_row_ptr_size(i));
-
+          nvtxRangePush("Copying csrRowPtr");
           csrRowPtr_gpu[i][0] = 0;
           for (int k = 1; k < get_gpu_row_ptr_num(i) - 1; k++)
             csrRowPtr_gpu[i][k] =
                 csrRowPtr[starting_row_gpu[i] + k] - i * avg_nnz;
           csrRowPtr_gpu[i][get_gpu_row_ptr_num(i) - 1] = nnz_gpu[i];
+          nvtxRangePop();
 
           // Segments the data to the other GPUs
+          nvtxRangePush("Segmenting csrColIdx and csrVal");
           csrColIdx_gpu[i] = &csrColIdx[i * avg_nnz];
           csrVal_gpu[i] = &csrVal[i * avg_nnz];
+          nvtxRangePop();
 
           printf("gpu-%d,start-row:%d,stop-row:%d,num-rows:%ld,num-nnz:%d\n", i,
                  starting_row_gpu[i], stoping_row_gpu[i],
@@ -724,9 +735,10 @@ public:
     SAFE_ALOC_MANAGED(val, get_mtx_size());
     srand(RAND_INIT_SEED);
 
+    nvtxRangePush("Randomizing matrix");
     for (IdxType i = 0; i < get_mtx_num(); i++)
       val[i] = (DataType)rand0to1();
-
+    nvtxRangePop();
     policy = none;
   }
   DenseMatrix(IdxType _height, IdxType _width, DataType _val,
@@ -738,10 +750,10 @@ public:
     SAFE_ALOC_MANAGED(val, get_mtx_size());
 
     srand(RAND_INIT_SEED);
-
+    nvtxRangePush("Filling matrix");
     for (IdxType i = 0; i < get_mtx_num(); i++)
       val[i] = (DataType)_val;
-
+    nvtxRangePop();
     policy = none;
   }
 
@@ -754,13 +766,16 @@ public:
     val_gpu = new DataType *[n_gpu];
 
     if (policy == replicate) {
+
       for (unsigned i = 0; i < n_gpu; i++) {
+        nvtxRangePush("Replicating matrix to gpu %d", i);
         if (i == 0) {
           val_gpu[i] = val;
         } else {
           SAFE_ALOC_MANAGED(val_gpu[i], get_mtx_size());
           std::memcpy(val_gpu[i], val, get_mtx_size());
         }
+        nvtxRangePop();
       }
     } else if (policy == segment) {
       SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
