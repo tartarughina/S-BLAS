@@ -36,7 +36,7 @@ template <typename IdxType, typename DataType>
 void sblas_spmv_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
                        DenseVector<IdxType, DataType> *pB,
                        DenseVector<IdxType, DataType> *pC, DataType alpha,
-                       DataType beta, unsigned n_gpu) {
+                       DataType beta, unsigned n_gpu, bool tuning = false) {
   assert((pA->width == pB->length));
   assert((pA->height) == (pC->length));
 
@@ -48,6 +48,9 @@ void sblas_spmv_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
   DenseVector<IdxType, DataType> C_copy(pC->get_vec_length(), 0.);
   C_copy.sync2gpu(n_gpu, replicate);
 
+  if (tuning) {
+    C_copy.applyGpuTuning(false);
+  }
   // Start OpenMP parallel region
 #pragma omp parallel num_threads(n_gpu) shared(comm, id)
   {

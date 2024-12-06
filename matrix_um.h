@@ -27,6 +27,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <nvtx3/nvToolsExt.h>
+
 using namespace std;
 
 // Multi-GPU sparse data sharing policy:
@@ -129,9 +131,6 @@ public:
     this->nnz_gpu = NULL;
   }
   ~CooSparseMatrix() {
-    // GPU[0] points to the same cooRowIdx as CPU, for this reason the free when
-    // gpu is used is not done on those pointers
-
     if (n_gpu != 0 and policy != none) {
       if (policy == replicate) {
         SAFE_FREE_MULTI_MANAGED(cooRowIdx_gpu, n_gpu);
@@ -206,8 +205,6 @@ public:
     if (n_gpu != 0 and policy != none) {
       // this is to replicate arrays on each GPU
       if (policy == replicate) {
-        // Do it in reverse so that the data is not prefectched to GPU0 while
-        // data are still required on the CPU side
         for (unsigned i = 0; i < n_gpu; i++) {
           if (i > 0) {
             SAFE_ALOC_MANAGED(this->cooRowIdx_gpu[i], get_nnz_idx_size());
@@ -225,9 +222,6 @@ public:
             cooVal_gpu[i] = cooVal;
           }
         }
-        for (unsigned i = 0; i < n_gpu; i++) {
-          // Tuning to load stuff on GPU goes here
-        }
       }
 
       if (policy == segment) {
@@ -239,13 +233,101 @@ public:
           cooRowIdx_gpu[i] = &cooRowIdx[i * avg_nnz];
           cooColIdx_gpu[i] = &cooColIdx[i * avg_nnz];
           cooVal_gpu[i] = &cooVal[i * avg_nnz];
-
-          // use get_gpu_nnz_idx_size(i) and get_gpu_nnz_val_size(i) to deal
-          // with tuning
         }
       }
     }
   }
+
+  void applyGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseSetReadMostly
+                                         : cudaMemAdviseSetPreferredLocation;
+
+    if (this->policy == replicate) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooRowIdx_gpu[i], get_nnz_idx_size(), advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooColIdx_gpu[i], get_nnz_idx_size(), advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooVal_gpu[i], get_nnz_val_size(), advise, i));
+
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(cooRowIdx_gpu[i], get_nnz_idx_size(), i));
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(cooColIdx_gpu[i], get_nnz_idx_size(), i));
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(cooVal_gpu[i], get_nnz_val_size(), i));
+      }
+    } else if (this->policy == segment) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(cooRowIdx_gpu[i], get_gpu_nnz_idx_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(cudaMemAdvise(cooColIdx_gpu[i], get_gpu_nnz_idx_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooVal_gpu[i], get_gpu_nnz_val_size(i), advise, i));
+
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(cooRowIdx_gpu[i], get_gpu_nnz_idx_size(i), i));
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(cooColIdx_gpu[i], get_gpu_nnz_idx_size(i), i));
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(cooVal_gpu[i], get_gpu_nnz_val_size(i), i));
+      }
+    }
+  };
+
+  void removeGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseUnsetReadMostly
+                                         : cudaMemAdviseUnsetPreferredLocation;
+
+    if (this->policy == replicate) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooRowIdx_gpu[i], get_nnz_idx_size(), advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooColIdx_gpu[i], get_nnz_idx_size(), advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooVal_gpu[i], get_nnz_val_size(), advise, i));
+
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            cooRowIdx_gpu[i], get_nnz_idx_size(), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            cooColIdx_gpu[i], get_nnz_idx_size(), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(cooVal_gpu[i], get_nnz_val_size(),
+                                            cudaCpuDeviceId));
+      }
+    } else if (this->policy == segment) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(cooRowIdx_gpu[i], get_gpu_nnz_idx_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(cudaMemAdvise(cooColIdx_gpu[i], get_gpu_nnz_idx_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(cooVal_gpu[i], get_gpu_nnz_val_size(i), advise, i));
+
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            cooRowIdx_gpu[i], get_gpu_nnz_idx_size(i), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            cooColIdx_gpu[i], get_gpu_nnz_idx_size(i), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            cooVal_gpu[i], get_gpu_nnz_val_size(i), cudaCpuDeviceId));
+      }
+    }
+  };
+
+  void applyCpuTuning() {
+    CUDA_SAFE_CALL(cudaMemAdvise(cooRowIdx, get_nnz_idx_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
+    CUDA_SAFE_CALL(cudaMemAdvise(cooColIdx, get_nnz_idx_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
+    CUDA_SAFE_CALL(cudaMemAdvise(cooVal, get_nnz_val_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
+  };
+
   void sortByRow() {
     struct CooElement<IdxType, DataType> *coo_arr =
         new struct CooElement<IdxType, DataType>[nnz];
@@ -350,13 +432,17 @@ public:
     mmio_data(csrRowPtrA, csrColIdxA, csrValA, filename);
     printf("input matrix A: ( %i, %i ) nnz = %i\n", m, n, nnzA);
 
+    nvtxRangePush("Casting csrRow");
     for (int i = 0; i < m + 1; i++) {
       this->csrRowPtr[i] = (IdxType)csrRowPtrA[i];
     }
+    nvtxRangePop();
+    nvtxRangePush("Casting csrCol and csrVal");
     for (int i = 0; i < nnzA; i++) {
       this->csrColIdx[i] = (IdxType)csrColIdxA[i];
       this->csrVal[i] = (DataType)csrValA[i];
     }
+    nvtxRangePop();
 
     free(csrRowPtrA);
     free(csrColIdxA);
@@ -395,14 +481,12 @@ public:
             std::memcpy(csrVal_gpu[i], csrVal, get_val_size());
           }
         }
-
-        for (unsigned i = 0; i < n_gpu; i++) {
-          // tuning goes here
-        }
       } else if (policy == segment) {
+        nvtxRangePush("Host Allocation");
         SAFE_ALOC_HOST(nnz_gpu, n_gpu * sizeof(IdxType));
         SAFE_ALOC_HOST(starting_row_gpu, n_gpu * sizeof(IdxType));
         SAFE_ALOC_HOST(stoping_row_gpu, n_gpu * sizeof(IdxType));
+        nvtxRangePop();
 
         IdxType avg_nnz = ceil((float)nnz / n_gpu);
 
@@ -420,28 +504,115 @@ public:
               csr_findRowIdxUsingNnzIdx(csrRowPtr, height, row_stoping_nnz);
 
           SAFE_ALOC_MANAGED(csrRowPtr_gpu[i], get_gpu_row_ptr_size(i));
-
+          nvtxRangePush("Copying csrRowPtr");
           csrRowPtr_gpu[i][0] = 0;
           for (int k = 1; k < get_gpu_row_ptr_num(i) - 1; k++)
             csrRowPtr_gpu[i][k] =
                 csrRowPtr[starting_row_gpu[i] + k] - i * avg_nnz;
           csrRowPtr_gpu[i][get_gpu_row_ptr_num(i) - 1] = nnz_gpu[i];
+          nvtxRangePop();
 
           // Segments the data to the other GPUs
+          nvtxRangePush("Segmenting csrColIdx and csrVal");
           csrColIdx_gpu[i] = &csrColIdx[i * avg_nnz];
           csrVal_gpu[i] = &csrVal[i * avg_nnz];
+          nvtxRangePop();
 
           printf("gpu-%d,start-row:%d,stop-row:%d,num-rows:%ld,num-nnz:%d\n", i,
                  starting_row_gpu[i], stoping_row_gpu[i],
                  get_gpu_row_ptr_num(i), nnz_gpu[i]);
         }
-
-        for (unsigned i = 0; i < n_gpu; i++) {
-          // tuning goes here
-        }
       }
     }
   }
+
+  void applyGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseSetReadMostly
+                                         : cudaMemAdviseSetPreferredLocation;
+
+    if (this->policy == replicate) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(csrRowPtr_gpu[i], get_row_ptr_size(), advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(csrColIdx_gpu[i], get_col_idx_size(), advise, i));
+        CUDA_SAFE_CALL(cudaMemAdvise(csrVal_gpu[i], get_val_size(), advise, i));
+
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(csrRowPtr_gpu[i], get_row_ptr_size(), i));
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(csrColIdx_gpu[i], get_col_idx_size(), i));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(csrVal_gpu[i], get_val_size(), i));
+      }
+    } else if (this->policy == segment) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(csrRowPtr_gpu[i], get_gpu_row_ptr_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(cudaMemAdvise(csrColIdx_gpu[i], get_gpu_col_idx_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(csrVal_gpu[i], get_gpu_nnz_val_size(i), advise, i));
+
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(csrRowPtr_gpu[i], get_gpu_row_ptr_size(i), i));
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(csrColIdx_gpu[i], get_gpu_col_idx_size(i), i));
+        CUDA_SAFE_CALL(
+            cudaMemPrefetchAsync(csrVal_gpu[i], get_gpu_nnz_val_size(i), i));
+      }
+    }
+  };
+
+  void removeGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseUnsetReadMostly
+                                         : cudaMemAdviseUnsetPreferredLocation;
+
+    if (this->policy == replicate) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(csrRowPtr_gpu[i], get_row_ptr_size(), advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(csrColIdx_gpu[i], get_col_idx_size(), advise, i));
+        CUDA_SAFE_CALL(cudaMemAdvise(csrVal_gpu[i], get_val_size(), advise, i));
+
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            csrRowPtr_gpu[i], get_row_ptr_size(), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            csrColIdx_gpu[i], get_col_idx_size(), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(csrVal_gpu[i], get_val_size(),
+                                            cudaCpuDeviceId));
+      }
+    } else if (this->policy == segment) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(csrRowPtr_gpu[i], get_gpu_row_ptr_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(cudaMemAdvise(csrColIdx_gpu[i], get_gpu_col_idx_size(i),
+                                     advise, i));
+        CUDA_SAFE_CALL(
+            cudaMemAdvise(csrVal_gpu[i], get_gpu_nnz_val_size(i), advise, i));
+
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            csrRowPtr_gpu[i], get_gpu_row_ptr_size(i), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            csrColIdx_gpu[i], get_gpu_col_idx_size(i), cudaCpuDeviceId));
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            csrVal_gpu[i], get_gpu_nnz_val_size(i), cudaCpuDeviceId));
+      }
+    }
+  };
+
+  void applyCpuTuning() {
+    CUDA_SAFE_CALL(cudaMemAdvise(csrRowPtr, get_row_ptr_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
+    CUDA_SAFE_CALL(cudaMemAdvise(csrColIdx, get_col_idx_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
+    CUDA_SAFE_CALL(cudaMemAdvise(csrVal, get_val_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
+  };
+
   size_t get_gpu_row_ptr_num(unsigned i_gpu) {
     assert(i_gpu < n_gpu);
     if (nnz_gpu != NULL)
@@ -564,9 +735,10 @@ public:
     SAFE_ALOC_MANAGED(val, get_mtx_size());
     srand(RAND_INIT_SEED);
 
+    nvtxRangePush("Randomizing matrix");
     for (IdxType i = 0; i < get_mtx_num(); i++)
       val[i] = (DataType)rand0to1();
-
+    nvtxRangePop();
     policy = none;
   }
   DenseMatrix(IdxType _height, IdxType _width, DataType _val,
@@ -578,10 +750,10 @@ public:
     SAFE_ALOC_MANAGED(val, get_mtx_size());
 
     srand(RAND_INIT_SEED);
-
+    nvtxRangePush("Filling matrix");
     for (IdxType i = 0; i < get_mtx_num(); i++)
       val[i] = (DataType)_val;
-
+    nvtxRangePop();
     policy = none;
   }
 
@@ -594,17 +766,16 @@ public:
     val_gpu = new DataType *[n_gpu];
 
     if (policy == replicate) {
+
       for (unsigned i = 0; i < n_gpu; i++) {
+        nvtxRangePush("Replicating matrix to GPU");
         if (i == 0) {
           val_gpu[i] = val;
         } else {
           SAFE_ALOC_MANAGED(val_gpu[i], get_mtx_size());
           std::memcpy(val_gpu[i], val, get_mtx_size());
         }
-      }
-
-      for (unsigned i = 0; i < n_gpu; i++) {
-        // tuning
+        nvtxRangePop();
       }
     } else if (policy == segment) {
       SAFE_ALOC_HOST(dim_gpu, n_gpu * sizeof(IdxType));
@@ -616,11 +787,54 @@ public:
         dim_gpu[i] = min((i + 1) * avg_val, first_order) - i * avg_val;
         val_gpu[i] = &val[(i * avg_val) * second_order];
       }
+    }
+  }
+
+  void applyGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseSetReadMostly
+                                         : cudaMemAdviseSetPreferredLocation;
+
+    if (this->policy == replicate) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(val_gpu[i], get_mtx_size(), advise, i));
+
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(val_gpu[i], get_mtx_size(), i));
+      }
+    } else if (this->policy == segment) {
+      IdxType second_order = (order == row_major) ? width : height;
 
       for (unsigned i = 0; i < n_gpu; i++) {
-        // tuning SIZE --> second_order * get_dim_gpu_size(i)
+        CUDA_SAFE_CALL(cudaMemAdvise(
+            val_gpu[i], second_order * get_dim_gpu_size(i), advise, i));
+
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            val_gpu[i], second_order * get_dim_gpu_size(i), i));
       }
     }
+  }
+
+  void removeGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseUnsetReadMostly
+                                         : cudaMemAdviseUnsetPreferredLocation;
+
+    if (this->policy == replicate) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(val_gpu[i], get_mtx_size(), advise, i));
+      }
+    } else if (this->policy == segment) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(val_gpu[i],
+                                     ((order == row_major) ? width : height) *
+                                         get_dim_gpu_size(i),
+                                     advise, i));
+      }
+    }
+  }
+
+  void applyCpuTuning() {
+    CUDA_SAFE_CALL(cudaMemAdvise(val, get_mtx_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
   }
 
   ~DenseMatrix() {
@@ -653,7 +867,7 @@ public:
     return trans_mtx;
   }
 
-  void sync2cpu(unsigned i_gpu) {
+  void sync2cpu(unsigned i_gpu, bool tuning = false) {
     assert(val_gpu != NULL);
     assert(i_gpu < n_gpu);
 
@@ -661,19 +875,18 @@ public:
       IdxType first_order = (order == row_major) ? height : width;
       IdxType second_order = (order == row_major) ? width : height;
       IdxType avg_val = ceil((double)first_order / n_gpu);
-      // Prefetch towards the host the scattered piece requested
-      // CUDA_SAFE_CALL(cudaMemcpy(
-      //     &val[i_gpu * avg_val * second_order], val_gpu[i_gpu],
-      //     second_order * get_dim_gpu_size(i_gpu), cudaMemcpyDeviceToHost));
-      CUDA_SAFE_CALL(cudaDeviceSynchronize());
+      if (tuning) {
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(
+            val_gpu[i_gpu], second_order * get_dim_gpu_size(i_gpu),
+            cudaCpuDeviceId));
+      }
     } else if (policy == replicate) {
-      // Should there be a cycle to reconstruct the whole matrix?
-      // For the tuning set the device as a way to prefetch the data
-      // CUDA_SAFE_CALL(cudaSetDevice(i_gpu));
-      // std::memcpy(val, val_gpu[i_gpu], get_mtx_size());
-      // prefetch that to the host, host will access it
-      CUDA_SAFE_CALL(cudaDeviceSynchronize());
+      if (tuning) {
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(val_gpu[i_gpu], get_mtx_size(),
+                                            cudaCpuDeviceId));
+      }
     }
+    CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
   void plusDenseMatrixGPU(DenseMatrix const &dm, DataType alpha,
                           DataType beta) {
@@ -725,16 +938,20 @@ public:
     this->val_gpu = NULL;
     SAFE_ALOC_MANAGED(this->val, get_vec_size());
     srand(RAND_INIT_SEED);
+    nvtxRangePush("Randomizing vector");
     for (IdxType i = 0; i < this->get_vec_length(); i++)
       (this->val)[i] = (DataType)rand0to1();
+    nvtxRangePop();
   }
   DenseVector(IdxType _length, DataType _val)
       : length(_length), n_gpu(0), policy(none) {
     this->val_gpu = NULL;
     SAFE_ALOC_MANAGED(this->val, get_vec_size());
     srand(RAND_INIT_SEED);
+    nvtxRangePush("Filling vector");
     for (IdxType i = 0; i < this->get_vec_length(); i++)
       (this->val)[i] = _val;
+    nvtxRangePop();
   }
   DenseVector(const DenseVector &dv)
       : length(dv.length), n_gpu(dv.n_gpu), policy(dv.policy) {
@@ -762,32 +979,68 @@ public:
                                      // partition
     if (policy == replicate) {
       val_gpu = new DataType *[n_gpu];
+
       for (unsigned i = 0; i < n_gpu; i++) {
+        nvtxRangePush("Replicating vector to GPU");
         if (i == 0) {
           val_gpu[i] = val;
         } else {
           SAFE_ALOC_MANAGED(val_gpu[i], get_vec_size());
           std::memcpy(val_gpu[i], val, get_vec_size());
         }
+        nvtxRangePop();
       }
-      // Tuning goes in another loop as val is required in the previous loop to
-      // be in the CPU Unless the copy is done on the GPU, at that point the
-      // tuning needs to be done only on the i == 0 iteration and at that point
-      // everything is fine
+    }
+
+    // Remember to call GPU tuning and before CPU operation remove it
+  }
+
+  // Prefetch may benefit from different streams being used however, as the
+  // original code used standard cudaMemcpy, using the async feature would be
+  // cheating, or at least that's what I think
+  void applyGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseSetReadMostly
+                                         : cudaMemAdviseSetPreferredLocation;
+
+    if (this->policy == replicate) {
       for (unsigned i = 0; i < n_gpu; i++) {
-        // tuning
+        CUDA_SAFE_CALL(cudaMemAdvise(val_gpu[i], get_vec_size(), advise, i));
+
+        CUDA_SAFE_CALL(cudaMemPrefetchAsync(val_gpu[i], get_vec_size(), i));
       }
     }
   }
-  void sync2cpu(
-      unsigned i_gpu) // all gpus have the same res vector, pick from any one
+
+  void removeGpuTuning(bool readOnly = true) {
+    cudaMemoryAdvise advise = (readOnly) ? cudaMemAdviseUnsetReadMostly
+                                         : cudaMemAdviseUnsetPreferredLocation;
+
+    if (this->policy == replicate) {
+      for (unsigned i = 0; i < n_gpu; i++) {
+        CUDA_SAFE_CALL(cudaMemAdvise(val_gpu[i], get_vec_size(), advise, i));
+      }
+    }
+  }
+
+  void applyCpuTuning() {
+    CUDA_SAFE_CALL(cudaMemAdvise(val, get_vec_size(),
+                                 cudaMemAdviseSetPreferredLocation,
+                                 cudaCpuDeviceId));
+  }
+
+  void
+  sync2cpu(unsigned i_gpu,
+           bool tuning =
+               false) // all gpus have the same res vector, pick from any one
   {
     assert(i_gpu < n_gpu);
     assert(val_gpu != NULL);
-    // CUDA_SAFE_CALL(cudaSetDevice(i_gpu));
-    // CUDA_SAFE_CALL(cudaMemcpy(val, val_gpu[i_gpu], get_vec_size(),
-    //                           cudaMemcpyDeviceToHost));
-    // prefetch from igpu to host
+
+    if (tuning) {
+      CUDA_SAFE_CALL(cudaMemPrefetchAsync(val_gpu[i_gpu], get_vec_size(),
+                                          cudaCpuDeviceId));
+    }
+
     CUDA_SAFE_CALL(cudaDeviceSynchronize());
   }
   void plusDenseVectorGPU(DenseVector const &dv, DataType alpha,

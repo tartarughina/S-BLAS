@@ -26,7 +26,7 @@ NVCC_FLAGS = -O3 -w -m64 -gencode=arch=compute_80,code=compute_80
 #NVCC_FLAGS = -O0 -g -G -m64 -gencode=arch=compute_70,code=compute_70
 
 CUDA_INCLUDES = -I$(CUDA_INSTALL_PATH)/include -I$(CUDA_MATH_PATH)/include -I$(CUDA_COMM_PATH)/include
-CUDA_LIBS = -L$(CUDA_INSTALL_PATH)/lib64 -L$(CUDA_MATH_PATH)/lib64 -L$(CUDA_COMM_PATH)/lib -lcudart -lcusparse -Xcompiler -fopenmp -lnccl
+CUDA_LIBS = -L$(CUDA_INSTALL_PATH)/lib64 -L$(CUDA_MATH_PATH)/lib64 -L$(CUDA_COMM_PATH)/lib -ldl -lcudart -lcusparse -Xcompiler -fopenmp -lnccl
 
 all: unit_test spmm_test spmm_test_um spmv_test spmv_test_um
 

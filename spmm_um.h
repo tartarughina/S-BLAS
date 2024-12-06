@@ -84,7 +84,7 @@ template <typename IdxType, typename DataType>
 void sblas_spmm_csr_v1(CsrSparseMatrix<IdxType, DataType> *pA,
                        DenseMatrix<IdxType, DataType> *pB,
                        DenseMatrix<IdxType, DataType> *pC, DataType alpha,
-                       DataType beta, unsigned n_gpu) {
+                       DataType beta, unsigned n_gpu, bool tuning = false) {
   assert((pA->width) == (pB->height));
   assert((pA->height) == (pC->height));
   assert((pB->width) == (pC->width));
@@ -164,7 +164,7 @@ template <typename IdxType, typename DataType>
 void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
                        DenseMatrix<IdxType, DataType> *pB,
                        DenseMatrix<IdxType, DataType> *pC, DataType alpha,
-                       DataType beta, unsigned n_gpu) {
+                       DataType beta, unsigned n_gpu, bool tuning = false) {
   assert((pA->width) == (pB->height));
   assert((pA->height) == (pC->height));
   assert((pB->width) == (pC->width));
@@ -181,6 +181,10 @@ void sblas_spmm_csr_v2(CsrSparseMatrix<IdxType, DataType> *pA,
   ncclComm_t comm[n_gpu];
   DenseMatrix<IdxType, DataType> C_copy(pC->height, pC->width, 0., row_major);
   C_copy.sync2gpu(n_gpu, replicate);
+
+  if (tuning) {
+    C_copy.applyGpuTuning(false);
+  }
 // Start OpenMP
 #pragma omp parallel num_threads(n_gpu) shared(comm, id)
   {
